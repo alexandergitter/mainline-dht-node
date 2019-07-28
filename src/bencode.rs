@@ -1,32 +1,32 @@
-use regex::bytes::Regex;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::str;
 
-struct Decoder<'a> {
+struct Cursor<'a> {
     data: &'a [u8],
+    position: usize,
 }
 
-impl<'a> Decoder<'a> {
-    fn parse(data: &[u8]) -> Result<Bencode, DecoderError> {
-        Decoder { data }.parse_value()
-    }
-
+impl<'a> Cursor<'a> {
     fn remaining(&self) -> usize {
-        self.data.len()
+        self.data.len() - self.position
     }
 
-    fn peek_byte(&self) -> Result<u8, DecoderError> {
-        if self.remaining() == 0 {
+    fn peek_byte_offset(&self, offset: usize) -> Result<u8, DecoderError> {
+        if self.remaining() < (offset + 1) {
             Err(DecoderError::EndOfStream)
         } else {
-            Ok(self.data[0])
+            Ok(self.data[self.position + offset])
         }
     }
 
+    fn peek_byte(&self) -> Result<u8, DecoderError> {
+        self.peek_byte_offset(0)
+    }
+
     fn advance(&mut self, count: usize) {
-        let new_start = std::cmp::min(count, self.remaining());
-        self.data = &self.data[new_start..];
+        let safe_offset = std::cmp::min(count, self.remaining());
+        self.position += safe_offset;
     }
 
     fn take_byte(&mut self) -> Result<u8, DecoderError> {
@@ -35,100 +35,142 @@ impl<'a> Decoder<'a> {
         result
     }
 
-    fn parse_value(&mut self) -> Result<Bencode, DecoderError> {
-        let next_byte = self.peek_byte()?;
+    fn fork(&self) -> Cursor {
+        Cursor {
+            data: self.data,
+            position: self.position,
+        }
+    }
 
-        match next_byte {
-            b'i' => self.parse_int(),
-            b'0'...b'9' => self.parse_bytes(),
-            b'l' => self.parse_list(),
-            b'd' => self.parse_dict(),
+    fn as_slice(&self) -> &[u8] {
+        &self.data[self.position..]
+    }
+}
+
+struct Decoder<'a> {
+    cursor: Cursor<'a>,
+}
+
+impl<'a> Decoder<'a> {
+    fn new(data: &[u8]) -> Decoder {
+        let cursor = Cursor { data, position: 0 };
+        Decoder { cursor }
+    }
+
+    fn parse_int(&mut self) -> Result<i64, DecoderError> {
+        let mut len = 0;
+        let mut c = self.cursor.fork();
+
+        match c.peek_byte()? {
+            b'+' | b'-' => {
+                len += 1;
+                c.advance(1);
+            }
+            b'0'...b'9' => {}
+            _ => return Err(DecoderError::ExpectedInteger),
+        }
+
+        if !(b'0'..=b'9').contains(&c.peek_byte()?) {
+            return Err(DecoderError::ExpectedInteger);
+        }
+
+        while (c.remaining() > 0) && (b'0'..=b'9').contains(&c.take_byte()?) {
+            len += 1;
+        }
+
+        let result = Ok(str::from_utf8(&self.cursor.as_slice()[..len])
+            .unwrap()
+            .parse()
+            .unwrap());
+        self.cursor.advance(len);
+        result
+    }
+
+    fn decode_value(&mut self) -> Result<Bencode, DecoderError> {
+        match self.cursor.peek_byte()? {
+            b'i' => self.decode_int(),
+            b'0'...b'9' => self.decode_bytestring(),
+            b'l' => self.decode_list(),
+            b'd' => self.decode_dict(),
             _ => Err(DecoderError::UnexpectedStartOfValue),
         }
     }
 
-    fn parse_int(&mut self) -> Result<Bencode, DecoderError> {
-        let raw_bytes = Regex::new(r"^i(-?\d+)e")
-            .unwrap()
-            .captures(self.data)
-            .ok_or(DecoderError::ExpectedInteger)?
-            .get(1)
-            .ok_or(DecoderError::ExpectedInteger)?
-            .as_bytes();
+    fn decode_int(&mut self) -> Result<Bencode, DecoderError> {
+        if self.cursor.take_byte()? != b'i' {
+            return Err(DecoderError::ExpectedIntegerStart);
+        }
 
-        self.advance(raw_bytes.len() + 2);
+        let integer = self.parse_int()?;
 
-        let integer = str::from_utf8(raw_bytes).unwrap().parse().unwrap();
+        if self.cursor.take_byte()? != b'e' {
+            return Err(DecoderError::ExpectedIntegerEnd);
+        }
+
         Ok(Bencode::Integer(integer))
     }
 
-    fn parse_bytes(&mut self) -> Result<Bencode, DecoderError> {
-        let raw_string_size = Regex::new(r"^(\d+):")
-            .unwrap()
-            .captures(self.data)
-            .ok_or(DecoderError::ExpectedStringStart)?
-            .get(1)
-            .ok_or(DecoderError::ExpectedStringStart)?
-            .as_bytes();
+    fn decode_bytestring(&mut self) -> Result<Bencode, DecoderError> {
+        let string_size = self.parse_int()? as usize;
 
-        self.advance(raw_string_size.len() + 1);
+        if self.cursor.take_byte()? != b':' {
+            return Err(DecoderError::ExpectedStringStart);
+        }
 
-        let string_size = str::from_utf8(raw_string_size).unwrap().parse().unwrap();
-
-        if self.remaining() < string_size {
+        if self.cursor.remaining() < string_size {
             return Err(DecoderError::InvalidStringSize);
         }
 
-        let bytes = self.data[..string_size].to_owned();
+        let bytes = self.cursor.as_slice()[..string_size].to_owned();
 
-        self.advance(string_size);
+        self.cursor.advance(string_size);
 
         Ok(Bencode::Bytes(bytes))
     }
 
-    fn parse_list(&mut self) -> Result<Bencode, DecoderError> {
-        if self.take_byte()? != b'l' {
+    fn decode_list(&mut self) -> Result<Bencode, DecoderError> {
+        if self.cursor.take_byte()? != b'l' {
             return Err(DecoderError::ExpectedListStart);
         }
 
         let mut result = Vec::new();
 
         loop {
-            let next_byte = self.peek_byte()?;
+            let next_byte = self.cursor.peek_byte()?;
 
             match next_byte {
                 b'e' => {
-                    self.take_byte()?;
+                    self.cursor.take_byte()?;
                     break;
                 }
-                _ => result.push(self.parse_value()?),
+                _ => result.push(self.decode_value()?),
             }
         }
 
         Ok(Bencode::List(result))
     }
 
-    fn parse_dict(&mut self) -> Result<Bencode, DecoderError> {
-        if self.take_byte()? != b'd' {
+    fn decode_dict(&mut self) -> Result<Bencode, DecoderError> {
+        if self.cursor.take_byte()? != b'd' {
             return Err(DecoderError::ExpectedDictStart);
         }
 
         let mut result = BTreeMap::new();
 
         loop {
-            let next_byte = self.peek_byte()?;
+            let next_byte = self.cursor.peek_byte()?;
 
             match next_byte {
                 b'e' => {
-                    self.take_byte()?;
+                    self.cursor.take_byte()?;
                     break;
                 }
                 _ => {
-                    let key = match self.parse_bytes()? {
+                    let key = match self.decode_bytestring()? {
                         Bencode::Bytes(bytes) => bytes,
                         _ => return Err(DecoderError::ExpectedStringKey),
                     };
-                    let value = self.parse_value()?;
+                    let value = self.decode_value()?;
 
                     result.insert(key, value);
                 }
@@ -139,10 +181,12 @@ impl<'a> Decoder<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DecoderError {
     EndOfStream,
     ExpectedInteger,
+    ExpectedIntegerStart,
+    ExpectedIntegerEnd,
     ExpectedStringStart,
     ExpectedListStart,
     ExpectedDictStart,
@@ -156,14 +200,14 @@ pub type Dict = BTreeMap<Vec<u8>, Bencode>;
 #[derive(Debug, PartialEq)]
 pub enum Bencode {
     Bytes(Vec<u8>),
-    Integer(isize),
+    Integer(i64),
     List(Vec<Bencode>),
     Dict(Dict),
 }
 
 impl Bencode {
     pub fn decode(input: &[u8]) -> Result<Bencode, DecoderError> {
-        Decoder::parse(input)
+        Decoder::new(input).decode_value()
     }
 
     pub fn encode(self) -> Vec<u8> {
@@ -245,45 +289,54 @@ mod tests {
 
     #[test]
     fn test_parse_int() {
+        assert_eq!(123, Decoder::new(b"123").parse_int().unwrap());
+        assert_eq!(123, Decoder::new(b"+123").parse_int().unwrap());
+        assert_eq!(-123, Decoder::new(b"-123").parse_int().unwrap());
+        assert_eq!(
+            DecoderError::ExpectedInteger,
+            Decoder::new(b"-a").parse_int().unwrap_err()
+        );
+        assert_eq!(
+            DecoderError::EndOfStream,
+            Decoder::new(b"").parse_int().unwrap_err()
+        );
+    }
+
+    #[test]
+    fn test_decode_int() {
         assert_eq!(
             Bencode::Integer(-123),
-            Decoder { data: b"i-123e" }.parse_int().unwrap()
+            Decoder::new(b"i-123e").decode_int().unwrap()
         )
     }
 
     #[test]
-    fn test_parse_bytes() {
+    fn test_decode_bytestring() {
         assert_eq!(
             Bencode::Bytes(b"abc".to_vec()),
-            Decoder { data: b"3:abcxyz" }.parse_bytes().unwrap()
+            Decoder::new(b"3:abcxyz").decode_bytestring().unwrap()
         )
     }
 
     #[test]
-    fn test_parse_list() {
+    fn test_decode_list() {
         assert_eq!(
             Bencode::List(vec![Bencode::Integer(4), Bencode::Bytes(b"qwe".to_vec())]),
-            Decoder {
-                data: b"li4e3:qwee"
-            }
-            .parse_list()
-            .unwrap()
+            Decoder::new(b"li4e3:qwee").decode_list().unwrap()
         )
     }
 
     #[test]
-    fn test_parse_dict() {
+    fn test_decode_dict() {
         let mut map = BTreeMap::new();
         map.insert(b"one".to_vec(), Bencode::Bytes(b"hello".to_vec()));
         map.insert(b"two".to_vec(), Bencode::Integer(123));
 
         assert_eq!(
             Bencode::Dict(map),
-            Decoder {
-                data: b"d3:one5:hello3:twoi123ee"
-            }
-            .parse_dict()
-            .unwrap()
+            Decoder::new(b"d3:one5:hello3:twoi123ee")
+                .decode_dict()
+                .unwrap()
         )
     }
 }

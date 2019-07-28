@@ -1,9 +1,9 @@
 [package]
-name = "dht"
+name = "mainline-dht-node"
 version = "0.1.0"
 authors = ["alex"]
 edition = "2018"
 
 [dependencies]
-regex = "1"
-rand = "0.6.5"
+cursive = "0.12"
+rand = "0.7.0"
