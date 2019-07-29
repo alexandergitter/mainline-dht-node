@@ -8,20 +8,20 @@ struct Cursor<'a> {
 }
 
 impl<'a> Cursor<'a> {
+    fn new(data: &[u8]) -> Cursor {
+        Cursor { data, position: 0 }
+    }
+
     fn remaining(&self) -> usize {
         self.data.len() - self.position
     }
 
-    fn peek_byte_offset(&self, offset: usize) -> Result<u8, DecoderError> {
-        if self.remaining() < (offset + 1) {
+    fn peek_byte(&self) -> Result<u8, DecoderError> {
+        if self.remaining() == 0 {
             Err(DecoderError::EndOfStream)
         } else {
-            Ok(self.data[self.position + offset])
+            Ok(self.data[self.position])
         }
-    }
-
-    fn peek_byte(&self) -> Result<u8, DecoderError> {
-        self.peek_byte_offset(0)
     }
 
     fn advance(&mut self, count: usize) {
@@ -42,7 +42,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn as_slice(&self) -> &[u8] {
+    fn get_slice(&self) -> &[u8] {
         &self.data[self.position..]
     }
 }
@@ -53,8 +53,9 @@ struct Decoder<'a> {
 
 impl<'a> Decoder<'a> {
     fn new(data: &[u8]) -> Decoder {
-        let cursor = Cursor { data, position: 0 };
-        Decoder { cursor }
+        Decoder {
+            cursor: Cursor::new(data),
+        }
     }
 
     fn parse_int(&mut self) -> Result<i64, DecoderError> {
@@ -78,7 +79,7 @@ impl<'a> Decoder<'a> {
             len += 1;
         }
 
-        let result = Ok(str::from_utf8(&self.cursor.as_slice()[..len])
+        let result = Ok(str::from_utf8(&self.cursor.get_slice()[..len])
             .unwrap()
             .parse()
             .unwrap());
@@ -121,7 +122,7 @@ impl<'a> Decoder<'a> {
             return Err(DecoderError::InvalidStringSize);
         }
 
-        let bytes = self.cursor.as_slice()[..string_size].to_owned();
+        let bytes = self.cursor.get_slice()[..string_size].to_owned();
 
         self.cursor.advance(string_size);
 
