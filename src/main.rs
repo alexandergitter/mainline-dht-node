@@ -5,10 +5,12 @@ use cursive::view::*;
 use cursive::views::*;
 use cursive::Cursive;
 use rand::prelude::*;
-use std::net::{SocketAddrV4, UdpSocket};
+use std::collections::VecDeque;
+use std::net::{SocketAddrV4, ToSocketAddrs, UdpSocket};
 use std::str;
+use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug)]
 struct MyInfo {
@@ -17,27 +19,68 @@ struct MyInfo {
     port: u16,
 }
 
-const BOOTSTRAP_NODE: &str = "78.139.1.110:6881";
+enum NetCommand {
+    Bootstrap(SocketAddrV4),
+}
+
+const BOOTSTRAP_NODE: &str = "router.bittorrent.com:6881";
+const BUCKET_SIZE: usize = 8;
 
 fn main() {
-    let mut my_node_id = [0u8; 20];
-    rand::thread_rng().fill_bytes(&mut my_node_id);
+    let (gui_tx, net_rx) = mpsc::channel::<NetCommand>();
+    let (net_tx, gui_rx) = mpsc::channel::<Box<std::fmt::Display + Send>>();
 
-    let my_info = MyInfo {
-        client_version: None,
-        id: my_node_id,
-        port: 6881,
-    };
+    thread::spawn(move || {
+        let mut my_node_id = [0u8; 20];
+        rand::thread_rng().fill_bytes(&mut my_node_id);
 
-    let socket = UdpSocket::bind("0.0.0.0:12345").unwrap();
-    socket.set_nonblocking(true).unwrap();
+        let my_info = MyInfo {
+            client_version: None,
+            id: my_node_id,
+            port: 6881,
+        };
 
-    let mut buf = vec![0; 1024];
+        let socket = UdpSocket::bind("0.0.0.0:12345").unwrap();
+        socket.set_nonblocking(true).unwrap();
+
+        let mut buf = vec![0; 1024];
+
+        loop {
+            if let Ok(command) = net_rx.try_recv() {
+                match command {
+                    NetCommand::Bootstrap(addr) => {
+                        let mut args = Dict::new();
+                        args.insert(b"id".to_vec(), Bencode::Bytes(my_info.id.to_vec()));
+                        args.insert(b"target".to_vec(), Bencode::Bytes(my_info.id.to_vec()));
+
+                        let req = krpc_request("find_node", args, &my_info);
+
+                        net_tx.send(Box::new(format!("sending: {}", req)));
+
+                        let res = socket.send_to(&req.encode(), addr);
+                        if let Err(_) = res {
+                            net_tx.send(Box::new("error sending"));
+                        }
+                    }
+                }
+            }
+
+            match socket.recv(&mut buf) {
+                Ok(num) => {
+                    let result = Bencode::decode(&buf[..num]).unwrap();
+                    net_tx.send(Box::new(format!("received: {}", result)));
+                }
+                Err(_) => {}
+            };
+
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
 
     // Creates the cursive root - required for every application.
     let mut cs = Cursive::default();
 
-    cs.set_user_data((my_info, socket));
+    cs.set_user_data(gui_tx);
 
     cs.add_fullscreen_layer(
         LinearLayout::vertical()
@@ -65,43 +108,30 @@ fn main() {
                     EditView::new()
                         .content(BOOTSTRAP_NODE)
                         .on_submit(|cs, val| {
-                            let (my_info, _) = cs.user_data::<(MyInfo, UdpSocket)>().unwrap();
-
-                            let mut args = Dict::new();
-                            args.insert(b"id".to_vec(), Bencode::Bytes(my_info.id.to_vec()));
-                            args.insert(b"target".to_vec(), Bencode::Bytes(my_info.id.to_vec()));
+                            let tx = cs.user_data::<mpsc::Sender<NetCommand>>().unwrap();
+                            tx.send(NetCommand::Bootstrap(val.parse().unwrap()));
 
                             cs.pop_layer();
-                            let res = krpc_sync("find_node", args, val, cs);
                         }),
                 ),
         );
     });
 
-    cs.add_global_callback('i', move |cs| {
-        let (_, socket) = cs.user_data::<(MyInfo, UdpSocket)>().unwrap();
-        match socket.recv(&mut buf) {
-            Ok(num) => log(cs, Bencode::decode(&buf[..num]).unwrap()),
-            Err(_) => log(cs, "No messages"),
-        };
-    });
+    cs.set_fps(30);
 
-    cs.run();
+    while cs.is_running() {
+        if let Ok(msg) = gui_rx.try_recv() {
+            cs.call_on_id("main_content", |view: &mut TextView| {
+                let new_content = format!("\n===\n{}", msg);
+                view.append(new_content)
+            });
+        }
+
+        cs.step();
+    }
 }
 
-fn log<T: std::fmt::Display>(cs: &mut Cursive, msg: T) {
-    cs.call_on_id("main_content", |view: &mut TextView| {
-        let new_content = format!("\n===\n{}", msg);
-        view.append(new_content)
-    });
-}
-
-fn krpc_sync<A: std::net::ToSocketAddrs>(
-    method: &str,
-    args: Dict,
-    to_addr: A,
-    cs: &mut Cursive,
-) -> Result<Bencode, KrpcError> {
+fn krpc_request(method: &str, args: Dict, my_info: &MyInfo) -> Bencode {
     let mut transaction_id = [0u8; 2];
     rand::thread_rng().fill_bytes(&mut transaction_id);
 
@@ -111,8 +141,6 @@ fn krpc_sync<A: std::net::ToSocketAddrs>(
     dict.insert(b"q".to_vec(), Bencode::Bytes(method.as_bytes().to_owned()));
     dict.insert(b"a".to_vec(), Bencode::Dict(args));
 
-    let (my_info, _) = cs.user_data::<(MyInfo, UdpSocket)>().unwrap();
-
     if let Some(ref client_version) = my_info.client_version {
         dict.insert(
             b"v".to_vec(),
@@ -120,36 +148,7 @@ fn krpc_sync<A: std::net::ToSocketAddrs>(
         );
     }
 
-    let bencode = Bencode::Dict(dict);
-    log(cs, format!("sending: {}", bencode));
-
-    let (_, socket) = cs.user_data::<(MyInfo, UdpSocket)>().unwrap();
-
-    let res = socket.send_to(&bencode.encode(), to_addr);
-    if let Err(_) = res {
-        log(cs, "error sending");
-        return Err(KrpcError::SendError);
-    }
-
-    let mut buf = vec![0; 1024];
-    let start_time = Instant::now();
-    let (_, socket) = cs.user_data::<(MyInfo, UdpSocket)>().unwrap();
-
-    while start_time.elapsed().as_secs() < 10 {
-        match socket.recv(&mut buf) {
-            Ok(num) => {
-                let result = Bencode::decode(&buf[..num]).unwrap();
-                log(cs, format!("received: {}", result));
-                return Ok(result);
-            }
-            Err(_) => {}
-        };
-
-        thread::sleep(Duration::from_millis(50));
-    }
-
-    log(cs, "Waiting for answer timed out");
-    Err(KrpcError::ResponseTimeout)
+    Bencode::Dict(dict)
 }
 
 enum KrpcError {
@@ -160,19 +159,87 @@ enum KrpcError {
     ErrorResponse,
 }
 
-#[derive(Debug)]
-struct DHTRoutingTable {
-    nodes: Vec<DHTNode>,
+type NodeId = [u8; 20];
+
+#[derive(Debug, PartialEq, Clone)]
+struct NodeContactInfo {
+    id: NodeId,
+    address: SocketAddrV4,
 }
 
 #[derive(Debug)]
-struct DHTNode {
-    contact: NodeContactInfo,
+struct RoutingEntry {
+    node: NodeContactInfo,
     last_response: Option<SystemTime>,
     last_query: Option<SystemTime>,
 }
 
-type NodeId = [u8; 20];
+#[derive(Debug)]
+struct Bucket {
+    nodes: Vec<RoutingEntry>,
+    last_changed: SystemTime,
+    upper_prefix_len: u32,
+}
+
+#[derive(Debug)]
+struct RoutingTable {
+    data: VecDeque<Bucket>,
+    reference_id: NodeId,
+}
+
+enum SeenIn {
+    Request,
+    Response,
+    Referral,
+}
+
+impl RoutingTable {
+    fn new(reference_id: NodeId) -> RoutingTable {
+        // TODO: figure out the avg. number of nodes added on bootstrap and set initial size accordingly
+        RoutingTable {
+            data: VecDeque::new(),
+            reference_id,
+        }
+    }
+
+    fn find_neighbors(&self, node_id: NodeId) {}
+
+    fn update(&mut self, node: NodeContactInfo, seenIn: SeenIn) {
+        if self.data.is_empty() {
+            self.data.push_back(Bucket {
+                nodes: Vec::with_capacity(BUCKET_SIZE),
+                last_changed: SystemTime::now(),
+                upper_prefix_len: 160,
+            })
+        }
+
+        let distance = node_id::distance(&self.reference_id, &node.id);
+        let mut prefix_len = 0;
+
+        for byte in &distance {
+            prefix_len += byte.leading_zeros();
+
+            if byte.leading_zeros() < 8 {
+                break;
+            }
+        }
+
+        let bucket = self
+            .data
+            .iter_mut()
+            .find(|bucket| prefix_len < bucket.upper_prefix_len)
+            .expect(&format!(
+                "no bucket for prefix length {} - this should never happen",
+                prefix_len
+            ));
+
+        bucket.nodes.push(RoutingEntry {
+            node,
+            last_query: None,
+            last_response: None,
+        });
+    }
+}
 
 mod node_id {
     use crate::NodeId;
@@ -206,39 +273,6 @@ mod node_id {
 
         result
     }
-}
-
-#[derive(Debug)]
-struct NodeContactInfo {
-    id: NodeId,
-    address: SocketAddrV4,
-}
-
-fn build_ping(my_info: &MyInfo) -> Bencode {
-    build_request(b"ping", Dict::new(), my_info)
-}
-
-fn build_find_node_request(target: &NodeId, my_info: &MyInfo) -> Bencode {
-    let mut args = Dict::new();
-    args.insert(b"target".to_vec(), Bencode::Bytes(target.to_vec()));
-
-    build_request(b"find_node", args, my_info)
-}
-
-fn build_request(query_type: &[u8], mut args: Dict, my_info: &MyInfo) -> Bencode {
-    let mut dict = Dict::new();
-    dict.insert(b"t".to_vec(), Bencode::Bytes(query_type.to_owned()));
-    dict.insert(b"y".to_vec(), Bencode::Bytes(b"q".to_vec()));
-    dict.insert(b"q".to_vec(), Bencode::Bytes(query_type.to_owned()));
-
-    if let Some(ref cv) = my_info.client_version {
-        dict.insert(b"v".to_vec(), Bencode::Bytes(cv.as_bytes().to_owned()));
-    }
-
-    args.insert(b"id".to_vec(), Bencode::Bytes(my_info.id.to_vec()));
-    dict.insert(b"a".to_vec(), Bencode::Dict(args));
-
-    Bencode::Dict(dict)
 }
 
 #[derive(Debug)]
@@ -289,13 +323,6 @@ impl FindNodeResponse {
     }
 }
 
-fn krpc_handle_noerr(bencode: Bencode) {
-    match krpc_handle(bencode) {
-        Ok(_) => (),
-        Err(what) => println!("Error in response handling: {}", what),
-    }
-}
-
 fn krpc_handle(bencode: Bencode) -> Result<(), &'static str> {
     let msg = match bencode {
         Bencode::Dict(map) => map,
@@ -322,4 +349,32 @@ fn krpc_on_return(msg: Dict) -> Result<(), &'static str> {
 fn krpc_on_error(msg: Dict) -> Result<(), &'static str> {
     println!("Received error reponse: {}", Bencode::Dict(msg));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_and_update_single_node() {
+        let mut reference_id = [0u8; 20];
+        let mut node_id = [0u8; 20];
+        rand::thread_rng().fill_bytes(&mut reference_id);
+        rand::thread_rng().fill_bytes(&mut node_id);
+
+        let node = NodeContactInfo {
+            id: node_id,
+            address: "127.0.0.1:6881".parse().unwrap(),
+        };
+
+        let mut rt = RoutingTable::new(reference_id);
+
+        rt.update(node.clone(), SeenIn::Request);
+
+        assert_eq!(1, rt.data.len());
+        assert_eq!(1, rt.data[0].nodes.len());
+        assert_eq!(node, rt.data[0].nodes[0].node);
+        assert!(rt.data[0].nodes[0].last_query.is_none());
+        assert!(rt.data[0].nodes[0].last_response.is_none());
+    }
 }

@@ -80,9 +80,9 @@ impl<'a> Decoder<'a> {
         }
 
         let result = Ok(str::from_utf8(&self.cursor.get_slice()[..len])
-            .unwrap()
+            .unwrap() // we know this is valid utf-8...
             .parse()
-            .unwrap());
+            .unwrap()); // and it's a number; we checked above, otherwise we wouldn't be here
         self.cursor.advance(len);
         result
     }
