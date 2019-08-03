@@ -35,13 +35,6 @@ impl<'a> Cursor<'a> {
         result
     }
 
-    fn fork(&self) -> Cursor {
-        Cursor {
-            data: self.data,
-            position: self.position,
-        }
-    }
-
     fn get_slice(&self) -> &[u8] {
         &self.data[self.position..]
     }
@@ -59,32 +52,42 @@ impl<'a> Decoder<'a> {
     }
 
     fn parse_int(&mut self) -> Result<i64, DecoderError> {
-        let mut len = 0;
-        let mut c = self.cursor.fork();
-
-        match c.peek_byte()? {
-            b'+' | b'-' => {
-                len += 1;
-                c.advance(1);
+        let is_negative = match self.cursor.peek_byte()? {
+            b'-' => {
+                self.cursor.advance(1);
+                true
             }
-            b'0'...b'9' => {}
-            _ => return Err(DecoderError::ExpectedInteger),
-        }
+            b'+' => {
+                self.cursor.advance(1);
+                false
+            }
+            _ => false,
+        };
 
-        if !(b'0'..=b'9').contains(&c.peek_byte()?) {
+        if !(self.cursor.peek_byte()?.is_ascii_digit()) {
             return Err(DecoderError::ExpectedInteger);
         }
 
-        while (c.remaining() > 0) && (b'0'..=b'9').contains(&c.take_byte()?) {
-            len += 1;
+        let mut result = 0i64;
+
+        while (self.cursor.remaining() > 0) && (self.cursor.peek_byte()?.is_ascii_digit()) {
+            let current_digit = (self.cursor.take_byte()? - b'0') as i64;
+
+            result = result
+                .checked_mul(10)
+                .ok_or(DecoderError::OversizedInteger)?;
+            if is_negative {
+                result = result
+                    .checked_sub(current_digit)
+                    .ok_or(DecoderError::OversizedInteger)?;
+            } else {
+                result = result
+                    .checked_add(current_digit)
+                    .ok_or(DecoderError::OversizedInteger)?;
+            }
         }
 
-        let result = Ok(str::from_utf8(&self.cursor.get_slice()[..len])
-            .unwrap() // we know this is valid utf-8...
-            .parse()
-            .unwrap()); // and it's a number; we checked above, otherwise we wouldn't be here
-        self.cursor.advance(len);
-        result
+        Ok(result)
     }
 
     fn decode_value(&mut self) -> Result<Bencode, DecoderError> {
@@ -185,6 +188,7 @@ impl<'a> Decoder<'a> {
 #[derive(Debug, PartialEq)]
 pub enum DecoderError {
     EndOfStream,
+    OversizedInteger,
     ExpectedInteger,
     ExpectedIntegerStart,
     ExpectedIntegerEnd,
@@ -300,6 +304,12 @@ mod tests {
         assert_eq!(
             DecoderError::EndOfStream,
             Decoder::new(b"").parse_int().unwrap_err()
+        );
+        assert_eq!(
+            DecoderError::OversizedInteger,
+            Decoder::new(b"-100000000000000000000")
+                .parse_int()
+                .unwrap_err()
         );
     }
 
