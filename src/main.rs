@@ -204,7 +204,7 @@ impl RoutingEntry {
             (_, Some(r)) if r <= 15 => NodeRating::Good,
             // Node has responded at least once and sent us a query in the last 15 minutes
             (Some(q), Some(_)) if q <= 15 => NodeRating::Good,
-            // We haven't heard anything from the node yet (node was a referral)
+            // We haven't heard anything from the node yet (likely was a referral)
             (None, None) => NodeRating::Questionable,
             // TODO: after 15 minutes of inactivity, nodes should not become bad, but
             //       questionable and we should try pinging them before marking them bad
@@ -233,6 +233,10 @@ impl Bucket {
             nodes: Vec::with_capacity(BUCKET_SIZE),
             bounds,
         }
+    }
+
+    fn has_empty_slots(&self) -> bool {
+        self.nodes.len() < BUCKET_SIZE
     }
 }
 
@@ -268,7 +272,7 @@ impl RoutingTable {
         assert!(!self.buckets.is_empty(), "Routing table contains no buckets. It must always have at least one (full-range) bucket.");
 
         /* Go through buckets and get the one correspoding to the prefix */
-        // TODO: this currently does a linear search; this should probably be done
+        // TODO: this currently does a linear search; it should probably be done
         //       with a bianry search, a B+ index tree, or something else
         let prefix_len = node_id::common_prefix_length(&self.reference_id, &node.id);
         let (bucket_index, bucket) = self
@@ -297,7 +301,7 @@ impl RoutingTable {
         new_entry.update(seen_in);
 
         /* Case 1: bucket still has open slots */
-        if bucket.nodes.len() < 8 {
+        if bucket.has_empty_slots() {
             bucket.nodes.push(new_entry);
             return;
         }
@@ -318,33 +322,60 @@ impl RoutingTable {
 
         /* Case 3: bucket can be split */
         if (bucket.bounds.end - bucket.bounds.start) > 1 {
-            let mut upper_bounds = bucket.bounds.clone();
-            upper_bounds.start += 1;
-            bucket.bounds.end = upper_bounds.start;
-            let mut upper_bucket = Bucket::new(upper_bounds);
+            let lower_bounds = Range {
+                start: bucket.bounds.start,
+                // the lower bucket will only cover one prefix bit
+                end: bucket.bounds.start + 1,
+            };
+            let upper_bounds = Range {
+                start: bucket.bounds.start + 1,
+                end: bucket.bounds.end,
+            };
 
+            /* Drain nodes that fall into the upper bucket */
+            // TODO: Replace with Vec::drain_filter once it's stabilized
             let mut i = 0;
+            let mut drained_upper_nodes = Vec::with_capacity(BUCKET_SIZE);
             while i != bucket.nodes.len() {
                 let prefix_len =
                     node_id::common_prefix_length(&self.reference_id, &bucket.nodes[i].node.id);
-                if upper_bucket.bounds.contains(&prefix_len) {
-                    upper_bucket.nodes.push(bucket.nodes.remove(i));
+                if upper_bounds.contains(&prefix_len) {
+                    drained_upper_nodes.push(bucket.nodes.remove(i));
                 } else {
                     i += 1;
                 }
             }
 
-            // TODO: There is an edge case where all existing nodes fall into the same
-            //       new half bucket. In that case this must continue trying to split
-            //       the correct half until it finds an empty slot or a bucket that can
-            //       no longer be split (i.e. recursively do Case 1 to Case 3)
-            if (bucket.nodes.len() < 8) && bucket.bounds.contains(&prefix_len) {
-                bucket.nodes.push(new_entry);
-            } else if upper_bucket.nodes.len() < 8 {
-                upper_bucket.nodes.push(new_entry);
-            }
+            // TODO: Correctly handle the following edge cases:
+            //       1. All existing nodes fall into lower/upper bucket, but new node into the other
+            //          -> insert node, split done
+            //       2. All existing nodes fall into lower/upper bucket, as does the new node
+            //       2a. The bucket with all nodes can be split further
+            //          -> continue splitting
+            //       2b. The bucket with all nodes cannot be split futher
+            //          -> split done, node will be discarded
+            if drained_upper_nodes.is_empty() {
+            } else if drained_upper_nodes.len() == BUCKET_SIZE {
+                bucket.nodes = drained_upper_nodes;
+            } else {
+                bucket.bounds = lower_bounds;
+                let mut upper_bucket = Bucket::new(upper_bounds);
+                upper_bucket.nodes = drained_upper_nodes;
 
-            self.buckets.insert(bucket_index + 1, upper_bucket);
+                assert!(
+                    bucket.has_empty_slots() && upper_bucket.has_empty_slots(),
+                    "Both buckets must have empty slots, since we drained at least one entry. drained size: {}",
+                    upper_bucket.nodes.len()
+                );
+
+                if bucket.bounds.contains(&prefix_len) {
+                    bucket.nodes.push(new_entry);
+                } else if upper_bucket.nodes.len() < 8 {
+                    upper_bucket.nodes.push(new_entry);
+                }
+
+                self.buckets.insert(bucket_index + 1, upper_bucket);
+            }
         }
     }
 }
@@ -688,12 +719,14 @@ mod tests {
         assert_eq!(2, rt.buckets.len());
         assert_eq!(8, rt.buckets[0].nodes.len());
 
-        let new_node = build_contact();
+        let mut new_node = build_contact();
+        new_node.id[0] = 0xff;
         rt.update(new_node.clone(), SeenIn::Referral);
 
         assert_eq!(2, rt.buckets.len());
         assert_eq!(8, rt.buckets[0].nodes.len());
         assert!(!bucket_contains(&rt.buckets[0], &new_node));
+        assert!(!bucket_contains(&rt.buckets[1], &new_node));
     }
 
     #[test]
