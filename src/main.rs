@@ -346,35 +346,36 @@ impl RoutingTable {
                 }
             }
 
-            // TODO: Correctly handle the following edge cases:
-            //       1. All existing nodes fall into lower/upper bucket, but new node into the other
-            //          -> insert node, split done
-            //       2. All existing nodes fall into lower/upper bucket, as does the new node
-            //       2a. The bucket with all nodes can be split further
-            //          -> continue splitting
-            //       2b. The bucket with all nodes cannot be split futher
+            // TODO: Correctly handle the edge case that all existing nodes AND the
+            //       new node fall into the same bucket:
+            //       1. The bucket with all nodes can be split further
+            //          -> either continue splitting one by one at the far end
+            //             OR to avoid this situation entirely, sort existing + new
+            //             entries by distance from reference and split in the middle
+            //       2. The bucket with all nodes cannot be split futher
             //          -> split done, node will be discarded
-            if drained_upper_nodes.is_empty() {
-            } else if drained_upper_nodes.len() == BUCKET_SIZE {
-                bucket.nodes = drained_upper_nodes;
-            } else {
+            let lower_has_slot = !(bucket.nodes.len() == BUCKET_SIZE);
+            let upper_has_slot = !(drained_upper_nodes.len() == BUCKET_SIZE);
+
+            if lower_has_slot && lower_bounds.contains(&prefix_len) {
                 bucket.bounds = lower_bounds;
                 let mut upper_bucket = Bucket::new(upper_bounds);
                 upper_bucket.nodes = drained_upper_nodes;
 
-                assert!(
-                    bucket.has_empty_slots() && upper_bucket.has_empty_slots(),
-                    "Both buckets must have empty slots, since we drained at least one entry. drained size: {}",
-                    upper_bucket.nodes.len()
-                );
-
-                if bucket.bounds.contains(&prefix_len) {
-                    bucket.nodes.push(new_entry);
-                } else if upper_bucket.nodes.len() < 8 {
-                    upper_bucket.nodes.push(new_entry);
-                }
+                bucket.nodes.push(new_entry);
 
                 self.buckets.insert(bucket_index + 1, upper_bucket);
+            } else if upper_has_slot && upper_bounds.contains(&prefix_len) {
+                bucket.bounds = lower_bounds;
+                let mut upper_bucket = Bucket::new(upper_bounds);
+                upper_bucket.nodes = drained_upper_nodes;
+
+                upper_bucket.nodes.push(new_entry);
+
+                self.buckets.insert(bucket_index + 1, upper_bucket);
+            } else {
+                // We decided not to split, revert draining some nodes from bucket
+                bucket.nodes.append(&mut drained_upper_nodes);
             }
         }
     }
@@ -694,6 +695,56 @@ mod tests {
         assert!(bucket_contains(&rt.buckets[1], &nodes[1]));
         assert!(bucket_contains(&rt.buckets[1], &nodes[2]));
         assert!(bucket_contains(&rt.buckets[1], &nodes[3]));
+    }
+
+    #[test]
+    fn split_bucket_with_the_new_node_alone_in_one_half() {
+        let mut reference_id = [0u8; 20];
+        rand::thread_rng().fill_bytes(&mut reference_id);
+        reference_id[0] = 0b11111111;
+        let mut nodes = build_contacts(8);
+
+        /* nodes near the reference */
+        nodes[0].id[0] = 0b10000000;
+        nodes[1].id[0] = 0b11000000;
+        nodes[2].id[0] = 0b11100000;
+        nodes[3].id[0] = 0b11110000;
+        nodes[4].id[0] = 0b11111000;
+        nodes[5].id[0] = 0b11111100;
+        nodes[6].id[0] = 0b11111110;
+        nodes[7].id[0] = 0b10000001;
+
+        let entries = nodes
+            .iter()
+            .map(|contact| RoutingEntry {
+                node: contact.clone(),
+                last_query: None,
+                last_response: None,
+            })
+            .collect();
+
+        let mut rt = RoutingTable::new(reference_id);
+        rt.buckets[0].nodes = entries;
+
+        let mut new_node = build_contact();
+        // new node is far from reference and will be alone in the new far bucket
+        new_node.id[0] = 0x00;
+
+        rt.update(new_node.clone(), SeenIn::Referral);
+        assert_eq!(2, rt.buckets.len());
+        assert_eq!(0..1, rt.buckets[0].bounds);
+        assert_eq!(1..160, rt.buckets[1].bounds);
+
+        assert!(bucket_contains(&rt.buckets[0], &new_node));
+
+        assert!(bucket_contains(&rt.buckets[1], &nodes[0]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[1]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[2]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[3]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[4]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[5]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[6]));
+        assert!(bucket_contains(&rt.buckets[1], &nodes[7]));
     }
 
     #[test]
