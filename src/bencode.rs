@@ -172,7 +172,11 @@ impl<'a> Decoder<'a> {
                 _ => {
                     let key = match self.decode_bytestring()? {
                         Bencode::Bytes(bytes) => bytes,
-                        _ => return Err(DecoderError::ExpectedStringKey),
+                        // NOTE: This should never happen,because we are diverting errors
+                        //       with the ? above. And decode_bytestring always returns a
+                        //       Bencode::Bytes; unfortunately this cannot be expressed yet.
+                        //       https://github.com/rust-lang/rfcs/pull/2593
+                        other => unreachable!("unexpected bencode type: {}", other),
                     };
                     let value = self.decode_value()?;
 
