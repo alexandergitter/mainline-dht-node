@@ -1,9 +1,11 @@
 mod bencode;
+mod fixed_vec;
 
 use bencode::{Bencode, Dict};
 use cursive::view::*;
 use cursive::views::*;
 use cursive::Cursive;
+use fixed_vec::FixedVec;
 use rand::prelude::*;
 use std::collections::VecDeque;
 use std::mem::MaybeUninit;
@@ -26,7 +28,6 @@ enum NetCommand {
 }
 
 const BOOTSTRAP_NODE: &str = "router.bittorrent.com:6881";
-const BUCKET_SIZE: usize = 8;
 
 fn main() {
     let (gui_tx, net_rx) = mpsc::channel::<NetCommand>();
@@ -222,113 +223,18 @@ impl RoutingEntry {
     }
 }
 
+#[derive(Debug)]
 struct Bucket {
-    entries: [MaybeUninit<RoutingEntry>; BUCKET_SIZE],
-    length: usize,
+    entries: FixedVec<RoutingEntry>,
     bounds: Range<u32>,
 }
 
 impl Bucket {
     fn new(bounds: Range<u32>) -> Bucket {
         Bucket {
-            entries: unsafe { MaybeUninit::uninit().assume_init() },
-            length: 0,
+            entries: FixedVec::new(),
             bounds,
         }
-    }
-
-    fn empty_slots(&self) -> usize {
-        BUCKET_SIZE - self.length
-    }
-
-    fn has_empty_slots(&self) -> bool {
-        self.length < BUCKET_SIZE
-    }
-
-    fn iter(&self) -> std::slice::Iter<'_, RoutingEntry> {
-        unsafe { std::slice::from_raw_parts(self.entries[0].as_ptr(), self.length).iter() }
-    }
-
-    fn push(&mut self, entry: RoutingEntry) {
-        assert!(self.has_empty_slots());
-        self.entries[self.length] = MaybeUninit::new(entry);
-        self.length += 1;
-    }
-
-    fn len(&self) -> usize {
-        self.length
-    }
-
-    fn swap_remove(&mut self, index: usize) -> RoutingEntry {
-        assert!(index < self.length);
-        let last_index = self.length - 1;
-        unsafe {
-            self.length -= 1;
-            // If we're removing an element other than the last one, swap the last for it
-            if index < last_index {
-                std::ptr::replace(
-                    self.entries[index].as_mut_ptr(),
-                    self.entries[last_index].as_ptr().read(),
-                )
-            } else {
-                self.entries[index].as_ptr().read()
-            }
-        }
-    }
-
-    // TODO: this probably wants to be merge(other: Bucket)
-    fn append(&mut self, entries: Vec<RoutingEntry>) {
-        assert!(self.empty_slots() >= entries.len());
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                entries.as_ptr(),
-                self.entries[self.length].as_mut_ptr(),
-                entries.len(),
-            );
-
-            self.length += entries.len()
-        }
-    }
-}
-
-impl Index<usize> for Bucket {
-    type Output = RoutingEntry;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        assert!(index < self.length);
-        unsafe { &*self.entries[index].as_ptr() }
-    }
-}
-
-impl IndexMut<usize> for Bucket {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        assert!(index < self.length);
-        unsafe { &mut *self.entries[index].as_mut_ptr() }
-    }
-}
-
-impl Drop for Bucket {
-    fn drop(&mut self) {
-        for elem in &mut self.entries[0..self.length] {
-            unsafe {
-                std::ptr::drop_in_place(elem.as_mut_ptr());
-            }
-        }
-    }
-}
-
-impl std::fmt::Debug for Bucket {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Bucket {{ bounds: {:?}, length: {}, entries: {} }}",
-            self.bounds,
-            self.length,
-            self.iter()
-                .map(|entry| format!("{:?}", entry))
-                .collect::<Vec<String>>()
-                .join(", ")
-        )
     }
 }
 
@@ -377,10 +283,13 @@ impl RoutingTable {
             ));
 
         /* See if we already have an entry for this node */
-        let entry_position = bucket.iter().position(|entry| entry.node.id == node.id);
+        let entry_position = bucket
+            .entries
+            .iter()
+            .position(|entry| entry.node.id == node.id);
 
         if let Some(entry_position) = entry_position {
-            bucket[entry_position].update(seen_in);
+            bucket.entries[entry_position].update(seen_in);
             return;
         }
 
@@ -389,8 +298,8 @@ impl RoutingTable {
         new_entry.update(seen_in);
 
         /* Case 1: bucket still has open slots */
-        if bucket.has_empty_slots() {
-            bucket.push(new_entry);
+        if bucket.entries.is_not_full() {
+            bucket.entries.push(new_entry);
             return;
         }
 
@@ -400,10 +309,11 @@ impl RoutingTable {
         //       to buckets, so they can remember new candidates they can
         //       swap in once an entry becomes bad?
         let bad_node = bucket
+            .entries
             .iter()
             .position(|entry| entry.rating() == NodeRating::Bad);
         if let Some(bad_node) = bad_node {
-            bucket[bad_node] = new_entry;
+            bucket.entries[bad_node] = new_entry;
             return;
         }
 
@@ -421,12 +331,12 @@ impl RoutingTable {
 
             /* Drain nodes that fall into the upper bucket */
             let mut i = 0;
-            let mut drained_upper_nodes = Vec::with_capacity(BUCKET_SIZE);
-            while i != bucket.len() {
+            let mut drained_upper_nodes = FixedVec::new();
+            while i != bucket.entries.len() {
                 let prefix_len =
-                    node_id::common_prefix_length(&self.reference_id, &bucket[i].node.id);
+                    node_id::common_prefix_length(&self.reference_id, &bucket.entries[i].node.id);
                 if upper_bounds.contains(&prefix_len) {
-                    drained_upper_nodes.push(bucket.swap_remove(i));
+                    drained_upper_nodes.push(bucket.entries.swap_remove(i));
                 } else {
                     i += 1;
                 }
@@ -440,28 +350,28 @@ impl RoutingTable {
             //             entries by distance from reference and split in the middle
             //       2. The bucket with all nodes cannot be split futher
             //          -> split done, node will be discarded
-            let lower_has_slot = !(bucket.len() == BUCKET_SIZE);
-            let upper_has_slot = !(drained_upper_nodes.len() == BUCKET_SIZE);
+            let lower_has_slot = bucket.entries.is_not_full();
+            let upper_has_slot = drained_upper_nodes.is_not_full();
 
             if lower_has_slot && lower_bounds.contains(&prefix_len) {
                 bucket.bounds = lower_bounds;
                 let mut upper_bucket = Bucket::new(upper_bounds);
-                upper_bucket.append(drained_upper_nodes);
+                upper_bucket.entries.append(drained_upper_nodes);
 
-                bucket.push(new_entry);
+                bucket.entries.push(new_entry);
 
                 self.buckets.insert(bucket_index + 1, upper_bucket);
             } else if upper_has_slot && upper_bounds.contains(&prefix_len) {
                 bucket.bounds = lower_bounds;
                 let mut upper_bucket = Bucket::new(upper_bounds);
-                upper_bucket.append(drained_upper_nodes);
+                upper_bucket.entries.append(drained_upper_nodes);
 
-                upper_bucket.push(new_entry);
+                upper_bucket.entries.push(new_entry);
 
                 self.buckets.insert(bucket_index + 1, upper_bucket);
             } else {
                 // We decided not to split, revert draining some nodes from bucket
-                bucket.append(drained_upper_nodes);
+                bucket.entries.append(drained_upper_nodes);
             }
         }
     }
@@ -605,11 +515,25 @@ mod tests {
         }
     }
 
+    fn build_entry() -> RoutingEntry {
+        RoutingEntry::new(build_contact())
+    }
+
     fn build_contacts(count: usize) -> Vec<NodeContactInfo> {
         let mut result = Vec::with_capacity(count);
 
-        for i in 0..count {
+        for _ in 0..count {
             result.push(build_contact());
+        }
+
+        result
+    }
+
+    fn build_entries(count: usize) -> Vec<RoutingEntry> {
+        let mut result = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            result.push(build_entry());
         }
 
         result
@@ -618,8 +542,8 @@ mod tests {
     fn bucket_contains(bucket: &Bucket, node: &NodeContactInfo) -> bool {
         let mut res = false;
 
-        for i in 0..bucket.len() {
-            if &bucket[i].node == node {
+        for i in 0..bucket.entries.len() {
+            if &bucket.entries[i].node == node {
                 res = true;
             }
         }
@@ -650,31 +574,31 @@ mod tests {
         let mut rt = RoutingTable::new(reference_id);
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(0, rt.buckets[0].len());
+        assert_eq!(0, rt.buckets[0].entries.len());
 
         rt.update(node.clone(), SeenIn::Referral);
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(1, rt.buckets[0].len());
-        assert_eq!(node, rt.buckets[0][0].node);
-        assert!(rt.buckets[0][0].last_query.is_none());
-        assert!(rt.buckets[0][0].last_response.is_none());
+        assert_eq!(1, rt.buckets[0].entries.len());
+        assert_eq!(node, rt.buckets[0].entries[0].node);
+        assert!(rt.buckets[0].entries[0].last_query.is_none());
+        assert!(rt.buckets[0].entries[0].last_response.is_none());
 
         rt.update(node.clone(), SeenIn::Query);
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(1, rt.buckets[0].len());
-        assert_eq!(node, rt.buckets[0][0].node);
-        assert!(rt.buckets[0][0].last_query.is_some());
-        assert!(rt.buckets[0][0].last_response.is_none());
+        assert_eq!(1, rt.buckets[0].entries.len());
+        assert_eq!(node, rt.buckets[0].entries[0].node);
+        assert!(rt.buckets[0].entries[0].last_query.is_some());
+        assert!(rt.buckets[0].entries[0].last_response.is_none());
 
         rt.update(node.clone(), SeenIn::Response);
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(1, rt.buckets[0].len());
-        assert_eq!(node, rt.buckets[0][0].node);
-        assert!(rt.buckets[0][0].last_query.is_some());
-        assert!(rt.buckets[0][0].last_response.is_some());
+        assert_eq!(1, rt.buckets[0].entries.len());
+        assert_eq!(node, rt.buckets[0].entries[0].node);
+        assert!(rt.buckets[0].entries[0].last_query.is_some());
+        assert!(rt.buckets[0].entries[0].last_response.is_some());
     }
 
     #[test]
@@ -684,17 +608,15 @@ mod tests {
 
         let mut rt = RoutingTable::new(reference_id);
         // Leave one empty slot in bucket
-        for _ in 1..=7 {
-            rt.buckets[0].push(RoutingEntry::new(build_contact()));
-        }
+        rt.buckets[0].entries.append_vec(build_entries(7));
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(7, rt.buckets[0].len());
+        assert_eq!(7, rt.buckets[0].entries.len());
 
         rt.update(build_contact(), SeenIn::Referral);
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(8, rt.buckets[0].len());
+        assert_eq!(8, rt.buckets[0].entries.len());
     }
 
     #[test]
@@ -705,7 +627,7 @@ mod tests {
         let mut rt = RoutingTable::new(reference_id);
         // Fill bucket
         for _ in 1..=8 {
-            rt.buckets[0].push(RoutingEntry {
+            rt.buckets[0].entries.push(RoutingEntry {
                 node: build_contact(),
                 // Make sure this is a "good" entry
                 last_query: Some(Instant::now()),
@@ -713,17 +635,18 @@ mod tests {
             });
         }
         // Make one node a "bad" one
-        let bad_node = rt.buckets[0][3].node.clone();
-        rt.buckets[0][3]
+        let bad_node = rt.buckets[0].entries[3].node.clone();
+        rt.buckets[0].entries[3]
             .last_query
             .replace(Instant::now() - Duration::from_secs(60 * 23));
-        rt.buckets[0][3]
+        rt.buckets[0].entries[3]
             .last_response
             .replace(Instant::now() - Duration::from_secs(60 * 23));
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(8, rt.buckets[0].len());
+        assert_eq!(8, rt.buckets[0].entries.len());
         assert!(rt.buckets[0]
+            .entries
             .iter()
             .any(|entry| entry.rating() == NodeRating::Bad));
 
@@ -731,7 +654,7 @@ mod tests {
         rt.update(new_node.clone(), SeenIn::Referral);
 
         assert_eq!(1, rt.buckets.len());
-        assert_eq!(8, rt.buckets[0].len());
+        assert_eq!(8, rt.buckets[0].entries.len());
         assert!(!bucket_contains(&rt.buckets[0], &bad_node));
         assert!(bucket_contains(&rt.buckets[0], &new_node));
     }
@@ -765,7 +688,7 @@ mod tests {
             .collect();
 
         let mut rt = RoutingTable::new(reference_id);
-        rt.buckets[0].append(entries);
+        rt.buckets[0].entries.append_vec(entries);
 
         let mut new_node = build_contact();
         // whether this node is near to or far from the reference doesn't matter,
@@ -816,7 +739,7 @@ mod tests {
             .collect();
 
         let mut rt = RoutingTable::new(reference_id);
-        rt.buckets[0].append(entries);
+        rt.buckets[0].entries.append_vec(entries);
 
         let mut new_node = build_contact();
         // new node is far from reference and will be alone in the new far bucket
@@ -851,7 +774,7 @@ mod tests {
             let mut node = build_contact();
             node.id[0] = 0xff;
 
-            rt.buckets[0].push(RoutingEntry {
+            rt.buckets[0].entries.push(RoutingEntry {
                 node,
                 // Make sure this is a "good" entry
                 last_query: Some(Instant::now()),
@@ -860,14 +783,14 @@ mod tests {
         }
 
         assert_eq!(2, rt.buckets.len());
-        assert_eq!(8, rt.buckets[0].len());
+        assert_eq!(8, rt.buckets[0].entries.len());
 
         let mut new_node = build_contact();
         new_node.id[0] = 0xff;
         rt.update(new_node.clone(), SeenIn::Referral);
 
         assert_eq!(2, rt.buckets.len());
-        assert_eq!(8, rt.buckets[0].len());
+        assert_eq!(8, rt.buckets[0].entries.len());
         assert!(!bucket_contains(&rt.buckets[0], &new_node));
         assert!(!bucket_contains(&rt.buckets[1], &new_node));
     }
@@ -891,103 +814,5 @@ mod tests {
 
         // TODO: capture how often we tried to ping a node and mark it questionable
         //       before it goes bad.
-    }
-
-    #[test]
-    fn bucket_push() {
-        let mut bucket = Bucket::new(0..160);
-        let e1 = RoutingEntry::new(build_contact());
-        let e2 = RoutingEntry::new(build_contact());
-        let e3 = RoutingEntry::new(build_contact());
-
-        bucket.push(e1.clone());
-        bucket.push(e2.clone());
-
-        assert_eq!(e1, bucket[0]);
-        assert_eq!(e2, bucket[1]);
-
-        bucket.push(e3.clone());
-
-        assert_eq!(e1, bucket[0]);
-        assert_eq!(e2, bucket[1]);
-        assert_eq!(e3, bucket[2]);
-    }
-
-    #[test]
-    fn bucket_len_and_empty_slots() {
-        let mut bucket = Bucket::new(0..160);
-        assert_eq!(0, bucket.len());
-        assert_eq!(8, bucket.empty_slots());
-        assert!(bucket.has_empty_slots());
-
-        for _ in 1..=2 {
-            bucket.push(RoutingEntry::new(build_contact()));
-        }
-
-        assert_eq!(2, bucket.len());
-        assert_eq!(6, bucket.empty_slots());
-        assert!(bucket.has_empty_slots());
-
-        for _ in 1..=6 {
-            bucket.push(RoutingEntry::new(build_contact()));
-        }
-
-        assert_eq!(8, bucket.len());
-        assert_eq!(0, bucket.empty_slots());
-        assert!(!bucket.has_empty_slots());
-    }
-
-    #[test]
-    fn bucket_iter() {
-        let mut bucket = Bucket::new(0..160);
-        let e1 = RoutingEntry::new(build_contact());
-        let e2 = RoutingEntry::new(build_contact());
-        let e3 = RoutingEntry::new(build_contact());
-
-        bucket.push(e1.clone());
-        bucket.push(e2.clone());
-        bucket.push(e3.clone());
-
-        let vec: Vec<_> = bucket.iter().collect();
-
-        assert_eq!(3, vec.len());
-        assert_eq!(&e1, vec[0]);
-        assert_eq!(&e2, vec[1]);
-        assert_eq!(&e3, vec[2]);
-    }
-
-    #[test]
-    fn bucket_append() {
-        let mut bucket = Bucket::new(0..160);
-        let e1 = RoutingEntry::new(build_contact());
-        let e2 = RoutingEntry::new(build_contact());
-        let e3 = RoutingEntry::new(build_contact());
-
-        let vec = vec![e1.clone(), e2.clone(), e3.clone()];
-        bucket.append(vec);
-
-        assert_eq!(e1, bucket[0]);
-        assert_eq!(e2, bucket[1]);
-        assert_eq!(e3, bucket[2]);
-    }
-
-    #[test]
-    fn bucket_swap_remove() {
-        let mut bucket = Bucket::new(0..160);
-        let e1 = RoutingEntry::new(build_contact());
-        let e2 = RoutingEntry::new(build_contact());
-        let e3 = RoutingEntry::new(build_contact());
-        bucket.push(e1.clone());
-        bucket.push(e2.clone());
-        bucket.push(e3.clone());
-
-        bucket.swap_remove(0);
-        assert_eq!(2, bucket.len());
-        assert_eq!(e3, bucket[0]);
-        assert_eq!(e2, bucket[1]);
-
-        bucket.swap_remove(1);
-        assert_eq!(1, bucket.len());
-        assert_eq!(e3, bucket[0]);
     }
 }
