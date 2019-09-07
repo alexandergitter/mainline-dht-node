@@ -263,7 +263,29 @@ impl RoutingTable {
         }
     }
 
-    fn find_neighbors(&self, node_id: NodeId) {}
+    fn find_node(&self, node_id: &NodeId) -> Option<&NodeContactInfo> {
+        let prefix_len = node_id::common_prefix_length(&self.reference_id, &node_id);
+        // TODO: this currently does a linear search; it should probably be done
+        //       with a bianry search, a B+ index tree, or something else
+        let bucket = self
+            .buckets
+            .iter()
+            .find(|bucket| bucket.bounds.contains(&prefix_len))
+            .expect(&format!(
+                "no bucket for prefix length {} - this should never happen",
+                prefix_len
+            ));
+
+        bucket
+            .entries
+            .iter()
+            .find(|entry| &entry.node.id == node_id)
+            .map(|entry| &entry.node)
+    }
+
+    fn find_closest(&self, node_id: &NodeId) -> [&NodeContactInfo; 8] {
+        unimplemented!()
+    }
 
     fn update(&mut self, node: NodeContactInfo, seen_in: SeenIn) {
         assert!(!self.buckets.is_empty(), "Routing table contains no buckets. It must always have at least one (full-range) bucket.");
@@ -563,6 +585,19 @@ mod tests {
         id2[0] = 0;
         id2[1] = 0b00100000;
         assert_eq!(10, node_id::common_prefix_length(&id1, &id2));
+    }
+
+    #[test]
+    fn find_node() {
+        let mut reference_id = [0u8; 20];
+        rand::thread_rng().fill_bytes(&mut reference_id);
+
+        let mut rt = RoutingTable::new(reference_id);
+        let entry = build_entry();
+        rt.buckets[0].entries.push(entry.clone());
+
+        assert_eq!(&entry.node, rt.find_node(&entry.node.id).unwrap());
+        assert!(rt.find_node(&build_contact().id).is_none());
     }
 
     #[test]
