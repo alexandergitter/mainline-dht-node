@@ -266,7 +266,7 @@ impl RoutingTable {
     fn find_node(&self, node_id: &NodeId) -> Option<&NodeContactInfo> {
         let prefix_len = node_id::common_prefix_length(&self.reference_id, &node_id);
         // TODO: this currently does a linear search; it should probably be done
-        //       with a bianry search, a B+ index tree, or something else
+        //       with a binary search, a B+ index tree, or something else
         let bucket = self
             .buckets
             .iter()
@@ -283,16 +283,62 @@ impl RoutingTable {
             .map(|entry| &entry.node)
     }
 
-    fn find_closest(&self, node_id: &NodeId) -> [&NodeContactInfo; 8] {
-        unimplemented!()
+    fn find_closest(&self, node_id: &NodeId) -> FixedVec<&NodeContactInfo> {
+        let prefix_len = node_id::common_prefix_length(&self.reference_id, &node_id);
+        // TODO: this currently does a linear search; it should probably be done
+        //       with a binary search, a B+ index tree, or something else
+        let (bucket_index, bucket) = self
+            .buckets
+            .iter()
+            .enumerate()
+            .find(|(_, bucket)| bucket.bounds.contains(&prefix_len))
+            .expect(&format!(
+                "no bucket for prefix length {} - this should never happen",
+                prefix_len
+            ));
+
+        let mut result = FixedVec::<&NodeContactInfo>::new();
+
+        for entry in bucket.entries.iter() {
+            result.push(&entry.node);
+        }
+
+        let mut offset = 1;
+        while result.is_not_full() {
+            if bucket_index >= offset {
+                let lower_bucket = self.buckets.get(bucket_index - offset).expect("There should be a valid bucket here. Is the `if` guard broken?");
+
+                for entry in lower_bucket.entries.iter() {
+                    result.push(&entry.node);
+                    if result.is_full() {
+                        break;
+                    }
+                }
+            }
+
+            if ((bucket_index + offset) < self.buckets.len()) && (result.is_not_full()) {
+                let higher_bucket = self.buckets.get(bucket_index +  offset).expect("There should be a valid bucket here. Is the `if` guard broken?");
+
+                for entry in higher_bucket.entries.iter() {
+                    result.push(&entry.node);
+                    if result.is_full() {
+                        break;
+                    }
+                }
+            }
+
+            offset += 1;
+        }
+
+        result
     }
 
     fn update(&mut self, node: NodeContactInfo, seen_in: SeenIn) {
         assert!(!self.buckets.is_empty(), "Routing table contains no buckets. It must always have at least one (full-range) bucket.");
 
-        /* Go through buckets and get the one correspoding to the prefix */
+        /* Go through buckets and get the one corresponding to the prefix */
         // TODO: this currently does a linear search; it should probably be done
-        //       with a bianry search, a B+ index tree, or something else
+        //       with a binary search, a B+ index tree, or something else
         let prefix_len = node_id::common_prefix_length(&self.reference_id, &node.id);
         let (bucket_index, bucket) = self
             .buckets
@@ -370,7 +416,7 @@ impl RoutingTable {
             //          -> either continue splitting one by one at the far end
             //             OR to avoid this situation entirely, sort existing + new
             //             entries by distance from reference and split in the middle
-            //       2. The bucket with all nodes cannot be split futher
+            //       2. The bucket with all nodes cannot be split further
             //          -> split done, node will be discarded
             let lower_has_slot = bucket.entries.is_not_full();
             let upper_has_slot = drained_upper_nodes.is_not_full();
@@ -519,7 +565,7 @@ fn krpc_on_return(msg: Dict) -> Result<(), &'static str> {
 }
 
 fn krpc_on_error(msg: Dict) -> Result<(), &'static str> {
-    println!("Received error reponse: {}", Bencode::Dict(msg));
+    println!("Received error response: {}", Bencode::Dict(msg));
     Ok(())
 }
 
@@ -527,12 +573,16 @@ fn krpc_on_error(msg: Dict) -> Result<(), &'static str> {
 mod tests {
     use super::*;
 
-    fn build_contact() -> NodeContactInfo {
+    fn random_node_id() -> NodeId {
         let mut node_id = [0u8; 20];
         rand::thread_rng().fill_bytes(&mut node_id);
 
+        node_id
+    }
+
+    fn build_contact() -> NodeContactInfo {
         NodeContactInfo {
-            id: node_id,
+            id: random_node_id(),
             address: "127.0.0.1:6881".parse().unwrap(),
         }
     }
@@ -589,15 +639,109 @@ mod tests {
 
     #[test]
     fn find_node() {
-        let mut reference_id = [0u8; 20];
-        rand::thread_rng().fill_bytes(&mut reference_id);
-
-        let mut rt = RoutingTable::new(reference_id);
+        let mut rt = RoutingTable::new(random_node_id());
         let entry = build_entry();
         rt.buckets[0].entries.push(entry.clone());
 
         assert_eq!(&entry.node, rt.find_node(&entry.node.id).unwrap());
         assert!(rt.find_node(&build_contact().id).is_none());
+    }
+
+    #[test]
+    fn find_closest_when_prefix_bucket_is_full() {
+        let mut nodes = build_contacts(8);
+        // The actual ids don't really matter; we're setting them manually here so
+        // we can be sure we can search for one that is _not_ equal to any of these
+        nodes[0].id[0] = 0b00000001;
+        nodes[1].id[0] = 0b00000010;
+        nodes[2].id[0] = 0b00000100;
+        nodes[3].id[0] = 0b00001000;
+        nodes[4].id[0] = 0b00010000;
+        nodes[5].id[0] = 0b00100000;
+        nodes[6].id[0] = 0b01000000;
+        nodes[7].id[0] = 0b10000000;
+
+        let entries = nodes
+            .iter()
+            .map(|contact| RoutingEntry {
+                node: contact.clone(),
+                last_query: None,
+                last_response: None,
+            })
+            .collect();
+
+        let mut rt = RoutingTable::new(random_node_id());
+        rt.buckets[0].entries.append_vec(entries);
+
+        let mut needle = random_node_id();
+        needle[0] = 0b11111111;
+        let closest_contacts = rt.find_closest(&needle);
+        assert!(closest_contacts.as_slice().contains(&&nodes[0]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[1]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[2]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[3]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[4]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[5]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[6]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[7]));
+    }
+
+    #[test]
+    fn find_closest_spanning_multiple_buckets() {
+        let mut nodes = build_contacts(8);
+        // The actual ids don't really matter; we're setting them manually here so
+        // we can be sure we can search for one that is _not_ equal to any of these
+        nodes[0].id[0] = 0b00000001;
+        nodes[1].id[0] = 0b00000010;
+        nodes[2].id[0] = 0b00000100;
+        nodes[3].id[0] = 0b00001000;
+        nodes[4].id[0] = 0b00010000;
+        nodes[5].id[0] = 0b00100000;
+        nodes[6].id[0] = 0b01000000;
+        nodes[7].id[0] = 0b10000000;
+
+        let mut entries: Vec<RoutingEntry> = nodes
+            .iter()
+            .map(|contact| RoutingEntry {
+                node: contact.clone(),
+                last_query: None,
+                last_response: None,
+            })
+            .collect();
+
+        let mut reference_id = random_node_id();
+        let mut needle = random_node_id();
+        reference_id[0] = 0b00001001;
+        needle[0] = 0b00001011;
+
+        let mut rt = RoutingTable::new(reference_id);
+        rt.buckets[0].bounds = 0..2;
+        rt.buckets.push_back(Bucket::new(2..5));
+        rt.buckets.push_back(Bucket::new(5..100)); // this is the bucket the needle falls into (6 common prefix bits)
+        rt.buckets.push_back(Bucket::new(100..160));
+
+        // This dumps entries randomly into buckets. The common prefix length a bucket
+        // represents, will most likely NOT be the correct one for the nodes.
+        // In this case however, we don't care about the actual content of the buckets,
+        // we just want to distribute nodes a little.
+        rt.buckets[0].entries.push(entries.remove(0));
+        rt.buckets[0].entries.push(entries.remove(0));
+        rt.buckets[1].entries.push(entries.remove(0));
+        rt.buckets[2].entries.push(entries.remove(0));
+        rt.buckets[2].entries.push(entries.remove(0));
+        rt.buckets[3].entries.push(entries.remove(0));
+        rt.buckets[3].entries.push(entries.remove(0));
+        rt.buckets[3].entries.push(entries.remove(0));
+
+        let closest_contacts = rt.find_closest(&needle);
+        assert!(closest_contacts.as_slice().contains(&&nodes[0]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[1]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[2]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[3]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[4]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[5]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[6]));
+        assert!(closest_contacts.as_slice().contains(&&nodes[7]));
     }
 
     #[test]

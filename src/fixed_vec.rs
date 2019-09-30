@@ -5,7 +5,7 @@ const BUCKET_SIZE: usize = 8;
 
 pub struct FixedVec<T> {
     // TODO: For now this uses the fixed bep-005 bucket size of 8. It would be nice to
-    //       gerneralize this once const generics are stable.
+    //       generalize this once const generics are stable.
     data: [MaybeUninit<T>; BUCKET_SIZE],
     length: usize,
 }
@@ -22,7 +22,7 @@ impl<T> FixedVec<T> {
         BUCKET_SIZE - self.length
     }
 
-    fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.length == BUCKET_SIZE
     }
 
@@ -40,7 +40,7 @@ impl<T> FixedVec<T> {
         self.length
     }
 
-    fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.data[0].as_ptr(), self.length) }
     }
 
