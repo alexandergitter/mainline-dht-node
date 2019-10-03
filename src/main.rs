@@ -249,6 +249,12 @@ enum SeenIn {
     Referral,
 }
 
+#[derive(Debug, PartialEq)]
+enum NodeMatch<'a> {
+    Exact(&'a NodeContactInfo),
+    Closest(FixedVec<&'a NodeContactInfo>),
+}
+
 impl RoutingTable {
     fn new(reference_id: NodeId) -> RoutingTable {
         let initial_bucket = Bucket::new(0..160);
@@ -263,27 +269,7 @@ impl RoutingTable {
         }
     }
 
-    fn find_node(&self, node_id: &NodeId) -> Option<&NodeContactInfo> {
-        let prefix_len = node_id::common_prefix_length(&self.reference_id, &node_id);
-        // TODO: this currently does a linear search; it should probably be done
-        //       with a binary search, a B+ index tree, or something else
-        let bucket = self
-            .buckets
-            .iter()
-            .find(|bucket| bucket.bounds.contains(&prefix_len))
-            .expect(&format!(
-                "no bucket for prefix length {} - this should never happen",
-                prefix_len
-            ));
-
-        bucket
-            .entries
-            .iter()
-            .find(|entry| &entry.node.id == node_id)
-            .map(|entry| &entry.node)
-    }
-
-    fn find_closest(&self, node_id: &NodeId) -> FixedVec<&NodeContactInfo> {
+    fn find(&self, node_id: &NodeId) -> NodeMatch {
         let prefix_len = node_id::common_prefix_length(&self.reference_id, &node_id);
         // TODO: this currently does a linear search; it should probably be done
         //       with a binary search, a B+ index tree, or something else
@@ -299,14 +285,25 @@ impl RoutingTable {
 
         let mut result = FixedVec::<&NodeContactInfo>::new();
 
+        // TODO: clean up the code for after this line
+
         for entry in bucket.entries.iter() {
+            if &entry.node.id == node_id {
+                return NodeMatch::Exact(&entry.node);
+            }
+
             result.push(&entry.node);
         }
 
         let mut offset = 1;
-        while result.is_not_full() {
+        while result.is_not_full()
+            && ((bucket_index >= offset) || (bucket_index + offset) < self.buckets.len())
+        {
             if bucket_index >= offset {
-                let lower_bucket = self.buckets.get(bucket_index - offset).expect("There should be a valid bucket here. Is the `if` guard broken?");
+                let lower_bucket = self
+                    .buckets
+                    .get(bucket_index - offset)
+                    .expect("There should be a valid bucket here. Is the `if` guard broken?");
 
                 for entry in lower_bucket.entries.iter() {
                     result.push(&entry.node);
@@ -317,7 +314,10 @@ impl RoutingTable {
             }
 
             if ((bucket_index + offset) < self.buckets.len()) && (result.is_not_full()) {
-                let higher_bucket = self.buckets.get(bucket_index +  offset).expect("There should be a valid bucket here. Is the `if` guard broken?");
+                let higher_bucket = self
+                    .buckets
+                    .get(bucket_index + offset)
+                    .expect("There should be a valid bucket here. Is the `if` guard broken?");
 
                 for entry in higher_bucket.entries.iter() {
                     result.push(&entry.node);
@@ -330,7 +330,7 @@ impl RoutingTable {
             offset += 1;
         }
 
-        result
+        NodeMatch::Closest(result)
     }
 
     fn update(&mut self, node: NodeContactInfo, seen_in: SeenIn) {
@@ -638,13 +638,12 @@ mod tests {
     }
 
     #[test]
-    fn find_node() {
+    fn find_exact_node() {
         let mut rt = RoutingTable::new(random_node_id());
         let entry = build_entry();
         rt.buckets[0].entries.push(entry.clone());
 
-        assert_eq!(&entry.node, rt.find_node(&entry.node.id).unwrap());
-        assert!(rt.find_node(&build_contact().id).is_none());
+        assert_eq!(NodeMatch::Exact(&entry.node), rt.find(&entry.node.id));
     }
 
     #[test]
@@ -675,7 +674,10 @@ mod tests {
 
         let mut needle = random_node_id();
         needle[0] = 0b11111111;
-        let closest_contacts = rt.find_closest(&needle);
+        let closest_contacts = match rt.find(&needle) {
+            NodeMatch::Closest(nodes) => nodes,
+            _ => panic!("Expected non-exact match (closest nodes)"),
+        };
         assert!(closest_contacts.as_slice().contains(&&nodes[0]));
         assert!(closest_contacts.as_slice().contains(&&nodes[1]));
         assert!(closest_contacts.as_slice().contains(&&nodes[2]));
@@ -733,7 +735,10 @@ mod tests {
         rt.buckets[3].entries.push(entries.remove(0));
         rt.buckets[3].entries.push(entries.remove(0));
 
-        let closest_contacts = rt.find_closest(&needle);
+        let closest_contacts = match rt.find(&needle) {
+            NodeMatch::Closest(nodes) => nodes,
+            _ => panic!("Expected non-exact match (closest nodes)"),
+        };
         assert!(closest_contacts.as_slice().contains(&&nodes[0]));
         assert!(closest_contacts.as_slice().contains(&&nodes[1]));
         assert!(closest_contacts.as_slice().contains(&&nodes[2]));

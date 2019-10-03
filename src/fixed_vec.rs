@@ -115,6 +115,12 @@ impl<T> Drop for FixedVec<T> {
     }
 }
 
+impl<T: PartialEq> PartialEq for FixedVec<T> {
+    fn eq(&self, other: &FixedVec<T>) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
 impl<T: std::fmt::Debug> std::fmt::Debug for FixedVec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         std::fmt::Debug::fmt(self.as_slice(), f)
@@ -221,5 +227,22 @@ mod tests {
         fvec.swap_remove(1);
         assert_eq!(1, fvec.len());
         assert_eq!("c", fvec[0]);
+    }
+
+    #[test]
+    fn test_eq() {
+        let mut a = FixedVec::new();
+        let mut b = FixedVec::new();
+        assert_eq!(a, b);
+
+        a.push(12);
+        assert_ne!(a, b);
+
+        b.push(12);
+        assert_eq!(a, b);
+
+        a.push(3);
+        b.push(4);
+        assert_ne!(a, b);
     }
 }
