@@ -13,6 +13,7 @@ pub struct FixedVec<T> {
 impl<T> FixedVec<T> {
     pub fn new() -> FixedVec<T> {
         FixedVec {
+            // TODO: Use MaybeUninit::uninit_array once it's stable
             data: unsafe { MaybeUninit::uninit().assume_init() },
             length: 0,
         }
