@@ -5,5 +5,5 @@ authors = ["Alexander Gitter"]
 edition = "2018"
 
 [dependencies]
-cursive = "0.12"
-rand = "0.7.0"
+cursive = "0.13"
+rand = "0.7.2"
