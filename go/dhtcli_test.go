@@ -143,3 +143,29 @@ func TestDecodeValue(t *testing.T) {
 		t.Error("Expected", input, "to return a dict")
 	}
 }
+
+func TestEncodeValue(t *testing.T) {
+	var input bencodeValue = bencodeInt(123)
+	var result, err = encodeValue(input)
+	if result != "i123e" || err != nil {
+		t.Error("expected \"i123e\", got", result, err)
+	}
+
+	input = bencodeString("spam")
+	result, err = encodeValue(input)
+	if result != "4:spam" || err != nil {
+		t.Error("expected \"4:spam\", got", result, err)
+	}
+
+	input = bencodeList{bencodeString("spam"), bencodeInt(123)}
+	result, err = encodeValue(input)
+	if result != "l4:spami123ee" || err != nil {
+		t.Error("expected \"l4:spami123ee\", got", result, err)
+	}
+
+	input = bencodeDict{"dog": bencodeString("woof"), "cow": bencodeString("moo")}
+	result, err = encodeValue(input)
+	if result != "d3:cow3:moo3:dog4:woofe" || err != nil {
+		t.Error("expected \"d3:cow3:moo3:dog4:woofe\", got", result, err)
+	}
+}

@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 )
 
 type cursor struct {
@@ -207,6 +209,61 @@ func decodeValue(cursor *cursor) (bencodeValue, error) {
 func decodeBencode(input string) (bencodeValue, error) {
 	var cursor = &cursor{input: input}
 	return decodeValue(cursor)
+}
+
+func encodeValue(value bencodeValue) (string, error) {
+	switch value.Type() {
+	case BencodeInteger:
+		return fmt.Sprintf("i%de", value.(bencodeInt)), nil
+	case BencodeString:
+		return fmt.Sprintf("%d:%s", len(value.(bencodeString)), value.(bencodeString)), nil
+	case BencodeList:
+		var buffer strings.Builder
+		buffer.WriteString("l")
+
+		for _, v := range value.(bencodeList) {
+			s, err := encodeValue(v)
+			if err != nil {
+				return "", err
+			}
+
+			buffer.WriteString(s)
+		}
+
+		buffer.WriteString("e")
+		return buffer.String(), nil
+	case BencodeDict:
+		var buffer strings.Builder
+		buffer.WriteString("d")
+
+		var keys = make([]string, 0, len(value.(bencodeDict)))
+		for k := range value.(bencodeDict) {
+			keys = append(keys, k)
+		}
+
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			s, err := encodeValue(bencodeString(k))
+			if err != nil {
+				return "", err
+			}
+
+			buffer.WriteString(s)
+
+			s, err = encodeValue(value.(bencodeDict)[k])
+			if err != nil {
+				return "", err
+			}
+
+			buffer.WriteString(s)
+		}
+
+		buffer.WriteString("e")
+		return buffer.String(), nil
+	default:
+		return "", fmt.Errorf("unknown bencode type")
+	}
 }
 
 func main() {
