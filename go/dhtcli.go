@@ -1,17 +1,31 @@
 package main
 
-import (
-	"crypto/rand"
-	"fmt"
-	"log"
-)
+const ENTRIES = 8
 
 func main() {
-	var nodeId = make([]byte, 20)
-	_, err := rand.Read(nodeId)
-	if err != nil {
-		log.Fatal("Could not generate random node ID", err)
-	}
+	var ownId, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
+	//var ownId = make([]byte, 20)
+	//_, err := rand.Read(ownId)
+	//if err != nil {
+	//	log.Fatal("Could not generate random node ID", err)
+	//}
 
-	fmt.Println(nodeId)
+	var node1, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var node2, _ = hexStringToNodeId("4000000000000000000000000000000000000001")
+	var node3, _ = hexStringToNodeId("fffffffffffffffffffffffffffffffffffffffe")
+	var node4, _ = hexStringToNodeId("7000000000000000000000000000000000000000")
+	var node5, _ = hexStringToNodeId("4102030405060708090a0b0c0d0e0f1011121319")
+	var node6, _ = hexStringToNodeId("3000000000000011111111111111111111111111")
+
+	var table = newRoutingTable(2, nodeId(ownId))
+	table.addEntry(routingEntry{nodeId: node1})
+	table.addEntry(routingEntry{nodeId: node2})
+	table.addEntry(routingEntry{nodeId: node3})
+	table.addEntry(routingEntry{nodeId: node4})
+	table.addEntry(routingEntry{nodeId: node5})
+	table.addEntry(routingEntry{nodeId: node6})
+
+	printRoutingTableTree(table)
+	v, _ := decodeBencode("d1:yli324ee1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aae")
+	printBencodeValue(v)
 }

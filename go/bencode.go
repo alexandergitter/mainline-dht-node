@@ -265,3 +265,39 @@ func encodeValue(value bencodeValue) (string, error) {
 		return "", fmt.Errorf("unknown bencode type")
 	}
 }
+
+func printBencodeValue(value bencodeValue) {
+	switch value.Type() {
+	case BencodeInteger:
+		fmt.Printf("%d", value.(bencodeInt))
+	case BencodeString:
+		fmt.Printf("%s", value.(bencodeString))
+	case BencodeList:
+		fmt.Printf("[")
+		for i, v := range value.(bencodeList) {
+			if i > 0 {
+				fmt.Printf(", ")
+			}
+			printBencodeValue(v)
+		}
+		fmt.Printf("]")
+	case BencodeDict:
+		fmt.Printf("{ ")
+		var keys = make([]string, 0, len(value.(bencodeDict)))
+		for k := range value.(bencodeDict) {
+			keys = append(keys, k)
+		}
+
+		for i, k := range keys {
+			if i > 0 {
+				fmt.Printf(", ")
+			}
+			printBencodeValue(bencodeString(k))
+			fmt.Printf(": ")
+			printBencodeValue(value.(bencodeDict)[k])
+		}
+		fmt.Printf(" }")
+	default:
+		fmt.Printf("unknown bencode type")
+	}
+}
