@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"strings"
+)
+
 type bucket struct {
 	bucketSize int
 	occupied   []bool
@@ -15,6 +20,10 @@ func newBucket(bucketSize int) bucket {
 }
 
 func (b bucket) addEntry(entry dhtNode) (updated bucket, success bool) {
+	if b.containsNodeId(entry.nodeId) {
+		return b, true
+	}
+
 	for i, occupied := range b.occupied {
 		if !occupied {
 			b.occupied[i] = true
@@ -59,4 +68,16 @@ func (b bucket) splitAt(bitPosition int) (zeroBucket bucket, oneBucket bucket) {
 	}
 
 	return zeroBucket, oneBucket
+}
+
+func (b bucket) String() string {
+	var builder strings.Builder
+	for i, occupied := range b.occupied {
+		if occupied {
+			builder.WriteString(fmt.Sprintf("%s ", b.entries[i].nodeId))
+		} else {
+			builder.WriteString("---------------------------------------- ")
+		}
+	}
+	return builder.String()
 }

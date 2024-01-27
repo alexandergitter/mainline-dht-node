@@ -266,23 +266,24 @@ func encodeValue(value bencodeValue) (string, error) {
 	}
 }
 
-func printBencodeValue(value bencodeValue) {
+func bencodeValueToString(value bencodeValue) string {
+	var buffer strings.Builder
 	switch value.Type() {
 	case BencodeInteger:
-		fmt.Printf("%d", value.(bencodeInt))
+		buffer.WriteString(fmt.Sprintf("%d", value.(bencodeInt)))
 	case BencodeString:
-		fmt.Printf("%s", value.(bencodeString))
+		buffer.WriteString(fmt.Sprintf("%s", value.(bencodeString)))
 	case BencodeList:
-		fmt.Printf("[")
+		buffer.WriteString("[")
 		for i, v := range value.(bencodeList) {
 			if i > 0 {
-				fmt.Printf(", ")
+				buffer.WriteString(", ")
 			}
-			printBencodeValue(v)
+			buffer.WriteString(bencodeValueToString(v))
 		}
-		fmt.Printf("]")
+		buffer.WriteString("]")
 	case BencodeDict:
-		fmt.Printf("{ ")
+		buffer.WriteString("{ ")
 		var keys = make([]string, 0, len(value.(bencodeDict)))
 		for k := range value.(bencodeDict) {
 			keys = append(keys, k)
@@ -290,14 +291,15 @@ func printBencodeValue(value bencodeValue) {
 
 		for i, k := range keys {
 			if i > 0 {
-				fmt.Printf(", ")
+				buffer.WriteString(", ")
 			}
-			printBencodeValue(bencodeString(k))
-			fmt.Printf(": ")
-			printBencodeValue(value.(bencodeDict)[k])
+			buffer.WriteString(bencodeValueToString(bencodeString(k)))
+			buffer.WriteString(": ")
+			buffer.WriteString(bencodeValueToString(value.(bencodeDict)[k]))
 		}
-		fmt.Printf(" }")
+		buffer.WriteString(" }")
 	default:
-		fmt.Printf("unknown bencode type")
+		buffer.WriteString("(unknown bencode type)")
 	}
+	return buffer.String()
 }

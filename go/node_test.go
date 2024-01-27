@@ -23,3 +23,27 @@ func TestNodeIdBitSet(t *testing.T) {
 		t.Error("Expected bitSet(159) to return true")
 	}
 }
+
+func TestLongestCommonPrefixLength(t *testing.T) {
+	var a, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var b, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var c, _ = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
+	var d, _ = hexStringToNodeId("002fffffffffffffffffffffffffffffffffffff")
+	var e, _ = hexStringToNodeId("007fffffffffffffffffffffffffffffffffffff")
+
+	if commonPrefixLength(a, a) != 160 {
+		t.Error("Expected 160")
+	}
+	if commonPrefixLength(a, b) != 0 {
+		t.Error("Expected 0")
+	}
+	if commonPrefixLength(a, c) != 8 {
+		t.Error("Expected 8")
+	}
+	if commonPrefixLength(a, d) != 10 {
+		t.Error("Expected 10")
+	}
+	if commonPrefixLength(a, e) != 9 {
+		t.Error("Expected 9")
+	}
+}

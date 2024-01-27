@@ -22,7 +22,7 @@ func TestTraversalContextNext(t *testing.T) {
 	}
 }
 
-func TestRoutingTableAddEntry(t *testing.T) {
+func TestRoutingTreeAddEntry(t *testing.T) {
 	var ownId, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
 	var distantId1, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
 	var distantId2, _ = hexStringToNodeId("8000000000000000000000000000000000000000")
@@ -32,6 +32,12 @@ func TestRoutingTableAddEntry(t *testing.T) {
 
 	var table = newRoutingTree(2, ownId)
 	table.addEntry(dhtNode{nodeId: distantId1})
+	table.addEntry(dhtNode{nodeId: distantId1})
+
+	if table.root.(leafNode).bucket.occupied[0] == true && table.root.(leafNode).bucket.occupied[1] == true {
+		t.Error("Buckets must not contain duplicate entries")
+	}
+
 	table.addEntry(dhtNode{nodeId: distantId2})
 	table.addEntry(dhtNode{nodeId: distantId3})
 

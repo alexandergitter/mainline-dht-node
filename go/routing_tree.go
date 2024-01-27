@@ -159,7 +159,7 @@ func printSubTree(n treeNode, leading string, tc traversalContext) {
 				if i > 0 {
 					fmt.Print(", ")
 				}
-				fmt.Print(nodeIdToString(entry.nodeId))
+				fmt.Print(entry.nodeId)
 			}
 		}
 		fmt.Println()
