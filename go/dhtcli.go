@@ -1,11 +1,32 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+)
 
 const ENTRIES = 8
 
+func getMyIp() (net.IP, error) {
+	var res, err = http.Get("https://api.ipify.org")
+	if err != nil {
+		return nil, err
+	}
+
+	ipStr, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result = net.ParseIP(string(ipStr))
+	return result, nil
+}
+
 func main() {
 	var ownId = hexStringToNodeId("0000000000000000000000000000000000000000")
+
 	//var ownId = make([]byte, 20)
 	//_, err := rand.Read(ownId)
 	//if err != nil {
