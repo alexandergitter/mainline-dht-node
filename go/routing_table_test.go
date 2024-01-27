@@ -3,12 +3,12 @@ package main
 import "testing"
 
 func TestRoutingTableAddEntry(t *testing.T) {
-	var ownId, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
-	var distantId1, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var distantId2, _ = hexStringToNodeId("8000000000000000000000000000000000000000")
-	var distantId3, _ = hexStringToNodeId("ffffffffffffff00000000000000000000000000")
-	var nearId1, _ = hexStringToNodeId("7000000000000000000000000000000000000000")
-	var nearId2, _ = hexStringToNodeId("0000000000ffffffffffffffffffffffffffffff")
+	var ownId = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var distantId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var distantId2 = hexStringToNodeId("8000000000000000000000000000000000000000")
+	var distantId3 = hexStringToNodeId("ffffffffffffff00000000000000000000000000")
+	var nearId1 = hexStringToNodeId("7000000000000000000000000000000000000000")
+	var nearId2 = hexStringToNodeId("0000000000ffffffffffffffffffffffffffffff")
 
 	var table = newRoutingTable(2, ownId)
 	table.addEntry(dhtNode{nodeId: distantId1})
@@ -53,5 +53,57 @@ func TestRoutingTableAddEntry(t *testing.T) {
 	}
 	if !table.table[1].containsNodeId(nearId2) {
 		t.Error("Expected bucket with longer prefix to contain nearId2")
+	}
+}
+
+func TestRoutingTableFindNode(t *testing.T) {
+	var ownId = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var nodeId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var nodeId2 = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
+	var nodeId3 = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
+	var nodeId4 = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
+
+	var table = newRoutingTable(2, ownId)
+	table.addEntry(dhtNode{nodeId: nodeId1})
+	table.addEntry(dhtNode{nodeId: nodeId2})
+	table.addEntry(dhtNode{nodeId: nodeId3})
+	table.addEntry(dhtNode{nodeId: nodeId4})
+
+	// At this point, the routing table looks something like this:
+	// 0: [nodeId1]
+	// 1: []
+	// 2: []
+	// 3: []
+	// 4: [nodeId2]
+	// 5: [nodeId3, nodeId4]
+
+	var result, exactMatch = table.findNode(nodeId1)
+	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(nodeId1) {
+		t.Error("Expected exact match")
+	}
+
+	result, exactMatch = table.findNode(nodeId4)
+	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(nodeId4) {
+		t.Error("Expected exact match")
+	}
+
+	result, exactMatch = table.findNode(hexStringToNodeId("faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 0
+	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId1) || !result[1].nodeId.isEqual(nodeId2) {
+		t.Error("Expected one entry from bucket 0 and one from bucket 4, got: ", result)
+	}
+
+	result, exactMatch = table.findNode(hexStringToNodeId("3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 2
+	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId1) || !result[1].nodeId.isEqual(nodeId2) {
+		t.Error("Expected one entry from bucket 0 and one from bucket 4, got: ", result)
+	}
+
+	result, exactMatch = table.findNode(hexStringToNodeId("1faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 3
+	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId2) || !result[1].nodeId.isEqual(nodeId3) {
+		t.Error("Expected one entry from bucket 4 and one from bucket 5, got: ", result)
+	}
+
+	result, exactMatch = table.findNode(hexStringToNodeId("000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 5
+	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId3) || !result[1].nodeId.isEqual(nodeId4) {
+		t.Error("Expected all from bucket 5, got: ", result)
 	}
 }

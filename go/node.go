@@ -51,20 +51,20 @@ func (n dhtNode) String() string {
 
 // Helpers
 
-func hexStringToNodeId(s string) (nodeId, error) {
+func hexStringToNodeId(s string) nodeId {
 	var result nodeId
 
 	if len(s) != 40 {
-		return result, fmt.Errorf("Invalid node ID length")
+		panic("Invalid hex string length")
 	}
 
 	for i := 0; i < 20; i++ {
 		if b, err := strconv.ParseUint(s[2*i:2*i+2], 16, 8); err != nil {
-			return result, err
+			panic(err)
 		} else {
 			result[i] = byte(b)
 		}
 	}
 
-	return result, nil
+	return result
 }

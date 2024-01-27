@@ -3,8 +3,9 @@ package main
 import "fmt"
 
 type routingTable struct {
-	ownNodeId nodeId
-	table     []bucket
+	ownNodeId  nodeId
+	bucketSize int
+	table      []bucket
 }
 
 func newRoutingTable(bucketSize int, ownNodeId nodeId) routingTable {
@@ -14,8 +15,9 @@ func newRoutingTable(bucketSize int, ownNodeId nodeId) routingTable {
 	initialTable = append(initialTable, newBucket(bucketSize))
 
 	return routingTable{
-		ownNodeId: ownNodeId,
-		table:     initialTable,
+		ownNodeId:  ownNodeId,
+		bucketSize: bucketSize,
+		table:      initialTable,
 	}
 }
 
@@ -53,16 +55,50 @@ func (t *routingTable) addEntry(entry dhtNode) {
 	t.addEntry(entry)
 }
 
+func (t *routingTable) findNode(targetId nodeId) (result []dhtNode, exactMatch bool) {
+	var currentMaxPrefixLength = len(t.table) - 1
+	var prefixLength = commonPrefixLength(t.ownNodeId, targetId)
+	var startBucketIndex = min(prefixLength, currentMaxPrefixLength)
+	result = make([]dhtNode, 0, t.bucketSize)
+
+	for offset := 0; (startBucketIndex-offset) > 0 || (startBucketIndex+offset) <= currentMaxPrefixLength; offset++ {
+		var i = startBucketIndex - offset
+		if i >= 0 {
+			var entries, exactMatch = t.table[i].getEntryByIdOrAll(targetId)
+
+			if exactMatch {
+				return entries, true
+			}
+
+			var maxSpaceLeft = t.bucketSize - len(result)
+			var entriesToAppend = min(maxSpaceLeft, len(entries))
+			result = append(result, entries[:entriesToAppend]...)
+		}
+
+		i = startBucketIndex + offset
+		if offset > 0 && i <= currentMaxPrefixLength {
+			var entries, exactMatch = t.table[i].getEntryByIdOrAll(targetId)
+
+			if exactMatch {
+				return entries, true
+			}
+
+			var maxSpaceLeft = t.bucketSize - len(result)
+			var entriesToAppend = min(maxSpaceLeft, len(entries))
+			result = append(result, entries[:entriesToAppend]...)
+		}
+
+		if len(result) >= t.bucketSize {
+			return result, false
+		}
+	}
+
+	return result, false
+}
+
 func printRoutingTable(table routingTable) {
 	for i, bucket := range table.table {
-		fmt.Printf("%3d: ", i)
-		for j, entry := range bucket.entries {
-			if bucket.occupied[j] {
-				fmt.Printf("%s ", entry.nodeId)
-			} else {
-				fmt.Printf("-------- ")
-			}
-		}
+		fmt.Printf("%3d: %s", i, bucket)
 		fmt.Println()
 	}
 }

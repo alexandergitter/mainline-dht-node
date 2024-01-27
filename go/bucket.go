@@ -45,6 +45,22 @@ func (b bucket) containsNodeId(id nodeId) bool {
 	return false
 }
 
+func (b bucket) getEntryByIdOrAll(id nodeId) (result []dhtNode, exactMatch bool) {
+	result = make([]dhtNode, 0, b.bucketSize)
+
+	for i, occupied := range b.occupied {
+		if occupied {
+			result = append(result, b.entries[i])
+
+			if b.entries[i].nodeId.isEqual(id) {
+				return result[len(result)-1:], true
+			}
+		}
+	}
+
+	return result, false
+}
+
 func (b bucket) splitAt(bitPosition int) (zeroBucket bucket, oneBucket bucket) {
 	if bitPosition < 0 || bitPosition > 159 {
 		panic("Invalid bit position")

@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestNodeIdBitSet(t *testing.T) {
-	var id, _ = hexStringToNodeId("9000000080000000000000000000000000000001")
+	var id = hexStringToNodeId("9000000080000000000000000000000000000001")
 	if id.isBitSet(0) != true {
 		t.Error("Expected bitSet(0) to return true")
 	}
@@ -25,11 +25,11 @@ func TestNodeIdBitSet(t *testing.T) {
 }
 
 func TestLongestCommonPrefixLength(t *testing.T) {
-	var a, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
-	var b, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var c, _ = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
-	var d, _ = hexStringToNodeId("002fffffffffffffffffffffffffffffffffffff")
-	var e, _ = hexStringToNodeId("007fffffffffffffffffffffffffffffffffffff")
+	var a = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var b = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var c = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
+	var d = hexStringToNodeId("002fffffffffffffffffffffffffffffffffffff")
+	var e = hexStringToNodeId("007fffffffffffffffffffffffffffffffffffff")
 
 	if commonPrefixLength(a, a) != 160 {
 		t.Error("Expected 160")
