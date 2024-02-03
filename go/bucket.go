@@ -45,7 +45,7 @@ func (b bucket) containsNodeId(id nodeId) bool {
 	return false
 }
 
-func (b bucket) getEntryByIdOrAll(id nodeId) (result []dhtNode, exactMatch bool) {
+func (b bucket) getEntryByIdOrReturnAll(id nodeId) (result []dhtNode, exactMatch bool) {
 	result = make([]dhtNode, 0, b.bucketSize)
 
 	for i, occupied := range b.occupied {

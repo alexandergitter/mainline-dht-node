@@ -34,7 +34,7 @@ func TestBucketAddEntry(t *testing.T) {
 	}
 }
 
-func TestBucketGetEntryByIdOrAll(t *testing.T) {
+func TestBucketGetEntryByIdOrReturnAll(t *testing.T) {
 	var bucket = newBucket(8)
 
 	var nodeId1 = hexStringToNodeId("9000000800900000080000000000000000000001")
@@ -44,17 +44,17 @@ func TestBucketGetEntryByIdOrAll(t *testing.T) {
 	bucket.addEntry(dhtNode{nodeId: nodeId1})
 	bucket.addEntry(dhtNode{nodeId: nodeId2})
 
-	var result, exactMatch = bucket.getEntryByIdOrAll(nodeId1)
+	var result, exactMatch = bucket.getEntryByIdOrReturnAll(nodeId1)
 	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(nodeId1) {
 		t.Error("Expected exact match")
 	}
 
-	result, exactMatch = bucket.getEntryByIdOrAll(nodeId2)
+	result, exactMatch = bucket.getEntryByIdOrReturnAll(nodeId2)
 	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(nodeId2) {
 		t.Error("Expected exact match")
 	}
 
-	result, exactMatch = bucket.getEntryByIdOrAll(nodeId3)
+	result, exactMatch = bucket.getEntryByIdOrReturnAll(nodeId3)
 	if exactMatch || len(result) != 2 {
 		t.Error("Expected all entries")
 	}

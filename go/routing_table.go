@@ -9,8 +9,8 @@ type routingTable struct {
 }
 
 func newRoutingTable(bucketSize int, ownNodeId nodeId) routingTable {
-	// Technically we don't need al 160 buckets, since there are only 8 nodes with common
-	// longest prefix length of 157, so that bucket will never be split.
+	// Technically we don't need all 160 buckets, since there are only 8 nodes with common
+	// longest prefix length of 157, so bucket 157 will never be split.
 	var initialTable = make([]bucket, 0, 160)
 	initialTable = append(initialTable, newBucket(bucketSize))
 
@@ -26,8 +26,8 @@ func (t *routingTable) addEntry(entry dhtNode) {
 	var prefixLength = commonPrefixLength(t.ownNodeId, entry.nodeId)
 	var bucketIndex = min(prefixLength, currentMaxPrefixLength)
 	var bucket = t.table[bucketIndex]
-	var updatedBucket, success = bucket.addEntry(entry)
 
+	var updatedBucket, success = bucket.addEntry(entry)
 	if success {
 		t.table[bucketIndex] = updatedBucket
 		return
@@ -40,8 +40,9 @@ func (t *routingTable) addEntry(entry dhtNode) {
 	}
 
 	// Option 2:
-	// New entry falls into the bucket our own node is currently in, so split the bucket, and append the
-	// one with the longer common prefix to the table.
+	// New entry falls into the bucket our own node is currently in, so split the bucket - leave the sub-bucket with the
+	// shorter common prefix at this current index and append the one with the longer common prefix to the table (thereby
+	// extending the prefix length the routing table covers).
 	var zeroBucket, oneBucket = bucket.splitAt(bucketIndex)
 	if t.ownNodeId.isBitSet(bucketIndex) {
 		// Own bit is set, so the common prefix for the zero bucket ends here, and it stays behind at bucketIndex.
@@ -51,6 +52,7 @@ func (t *routingTable) addEntry(entry dhtNode) {
 		t.table[bucketIndex] = oneBucket
 		t.table = append(t.table, zeroBucket)
 	}
+
 	// Now that we set up the new buckets, we can try to add the entry again.
 	t.addEntry(entry)
 }
@@ -64,7 +66,7 @@ func (t *routingTable) findNode(targetId nodeId) (result []dhtNode, exactMatch b
 	for offset := 0; (startBucketIndex-offset) > 0 || (startBucketIndex+offset) <= currentMaxPrefixLength; offset++ {
 		var i = startBucketIndex - offset
 		if i >= 0 {
-			var entries, exactMatch = t.table[i].getEntryByIdOrAll(targetId)
+			var entries, exactMatch = t.table[i].getEntryByIdOrReturnAll(targetId)
 
 			if exactMatch {
 				return entries, true
@@ -77,7 +79,7 @@ func (t *routingTable) findNode(targetId nodeId) (result []dhtNode, exactMatch b
 
 		i = startBucketIndex + offset
 		if offset > 0 && i <= currentMaxPrefixLength {
-			var entries, exactMatch = t.table[i].getEntryByIdOrAll(targetId)
+			var entries, exactMatch = t.table[i].getEntryByIdOrReturnAll(targetId)
 
 			if exactMatch {
 				return entries, true
