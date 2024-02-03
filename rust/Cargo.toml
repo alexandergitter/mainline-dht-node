@@ -2,7 +2,7 @@
 name = "mainline-dht-node"
 version = "0.1.0"
 authors = ["Alexander Gitter"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 cursive = "0.13"
