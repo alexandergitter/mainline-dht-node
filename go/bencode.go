@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-type cursor struct {
+type scanner struct {
 	input    string
 	position int
 }
 
-func (c *cursor) next() (result byte, eof bool) {
+func (c *scanner) next() (result byte, eof bool) {
 	if c.position >= len(c.input) {
 		return 0, true
 	}
@@ -24,7 +24,7 @@ func (c *cursor) next() (result byte, eof bool) {
 	return result, false
 }
 
-func (c *cursor) peek() (result byte, eof bool) {
+func (c *scanner) peek() (result byte, eof bool) {
 	if c.position >= len(c.input) {
 		return 0, true
 	}
@@ -32,7 +32,7 @@ func (c *cursor) peek() (result byte, eof bool) {
 	return c.input[c.position], false
 }
 
-func (c *cursor) acceptSingle(accepted string) (result byte, found bool) {
+func (c *scanner) acceptSingle(accepted string) (result byte, found bool) {
 	if b, eof := c.peek(); eof || !bytes.Contains([]byte(accepted), []byte{b}) {
 		return 0, false
 	} else {
@@ -41,7 +41,7 @@ func (c *cursor) acceptSingle(accepted string) (result byte, found bool) {
 	}
 }
 
-func (c *cursor) acceptMultiple(accepted string) string {
+func (c *scanner) acceptMultiple(accepted string) string {
 	var length = 0
 
 	for _, found := c.acceptSingle(accepted); found; _, found = c.acceptSingle(accepted) {
@@ -51,7 +51,7 @@ func (c *cursor) acceptMultiple(accepted string) string {
 	return c.input[c.position-length : c.position]
 }
 
-func (c *cursor) acceptRun(length int) (string, error) {
+func (c *scanner) acceptRun(length int) (string, error) {
 	if c.position+length > len(c.input) {
 		return "", fmt.Errorf("unexpected end of input")
 	}
@@ -95,13 +95,13 @@ func (d bencodeDict) Type() bencodeType {
 	return BencodeDict
 }
 
-func parseInteger(cursor *cursor) (int, error) {
+func parseInteger(scanner *scanner) (int, error) {
 	var sign = 1
-	if c, found := cursor.acceptSingle("-+"); found && c == '-' {
+	if c, found := scanner.acceptSingle("-+"); found && c == '-' {
 		sign = -1
 	}
 
-	var chars = cursor.acceptMultiple("0123456789")
+	var chars = scanner.acceptMultiple("0123456789")
 
 	if len(chars) == 0 {
 		return 0, fmt.Errorf("unexpected integer with zero digits")
@@ -111,48 +111,48 @@ func parseInteger(cursor *cursor) (int, error) {
 	return res * sign, err
 }
 
-func decodeInteger(cursor *cursor) (bencodeInt, error) {
-	if c, found := cursor.acceptSingle("i"); !found {
+func decodeInteger(scanner *scanner) (bencodeInt, error) {
+	if c, found := scanner.acceptSingle("i"); !found {
 		return 0, fmt.Errorf("expected integer to start with \"i\", got %c instead", c)
 	}
 
-	var result, err = parseInteger(cursor)
+	var result, err = parseInteger(scanner)
 
-	if c, found := cursor.acceptSingle("e"); !found {
+	if c, found := scanner.acceptSingle("e"); !found {
 		return 0, fmt.Errorf("unexpected end of integer: %c", c)
 	}
 
 	return bencodeInt(result), err
 }
 
-func decodeString(cursor *cursor) (bencodeString, error) {
-	var length, err = parseInteger(cursor)
+func decodeString(scanner *scanner) (bencodeString, error) {
+	var length, err = parseInteger(scanner)
 	if err != nil {
 		return "", err
 	} else if length < 0 {
 		return "", fmt.Errorf("unexpected negative string length")
 	}
 
-	if c, found := cursor.acceptSingle(":"); !found {
+	if c, found := scanner.acceptSingle(":"); !found {
 		return "", fmt.Errorf("expected string to start with \":\", got %c instead", c)
 	}
 
-	result, err := cursor.acceptRun(length)
+	result, err := scanner.acceptRun(length)
 	return bencodeString(result), err
 }
 
-func decodeList(cursor *cursor) (bencodeList, error) {
-	if c, found := cursor.acceptSingle("l"); !found {
+func decodeList(scanner *scanner) (bencodeList, error) {
+	if c, found := scanner.acceptSingle("l"); !found {
 		return nil, fmt.Errorf("expected list to start with \"l\", got %c instead", c)
 	}
 
 	var result = make(bencodeList, 0)
 
 	for {
-		if _, found := cursor.acceptSingle("e"); found {
+		if _, found := scanner.acceptSingle("e"); found {
 			return result, nil
 		} else {
-			var value, err = decodeValue(cursor)
+			var value, err = decodeValue(scanner)
 			if err != nil {
 				return nil, err
 			}
@@ -162,23 +162,23 @@ func decodeList(cursor *cursor) (bencodeList, error) {
 	}
 }
 
-func decodeDict(cursor *cursor) (bencodeDict, error) {
-	if c, found := cursor.acceptSingle("d"); !found {
+func decodeDict(scanner *scanner) (bencodeDict, error) {
+	if c, found := scanner.acceptSingle("d"); !found {
 		return nil, fmt.Errorf("expected dict to start with \"d\", got %c instead", c)
 	}
 
 	var result = make(bencodeDict)
 
 	for {
-		if _, found := cursor.acceptSingle("e"); found {
+		if _, found := scanner.acceptSingle("e"); found {
 			return result, nil
 		} else {
-			var key, err = decodeString(cursor)
+			var key, err = decodeString(scanner)
 			if err != nil {
 				return nil, err
 			}
 
-			value, err := decodeValue(cursor)
+			value, err := decodeValue(scanner)
 			if err != nil {
 				return nil, err
 			}
@@ -188,27 +188,27 @@ func decodeDict(cursor *cursor) (bencodeDict, error) {
 	}
 }
 
-func decodeValue(cursor *cursor) (bencodeValue, error) {
-	var c, eof = cursor.peek()
+func decodeValue(scanner *scanner) (bencodeValue, error) {
+	var c, eof = scanner.peek()
 	if eof {
 		return nil, fmt.Errorf("unexpected end of input")
 	}
 
 	switch c {
 	case 'i':
-		return decodeInteger(cursor)
+		return decodeInteger(scanner)
 	case 'l':
-		return decodeList(cursor)
+		return decodeList(scanner)
 	case 'd':
-		return decodeDict(cursor)
+		return decodeDict(scanner)
 	default:
-		return decodeString(cursor)
+		return decodeString(scanner)
 	}
 }
 
 func decodeBencode(input string) (bencodeValue, error) {
-	var cursor = &cursor{input: input}
-	return decodeValue(cursor)
+	var scanner = &scanner{input: input}
+	return decodeValue(scanner)
 }
 
 func encodeValue(value bencodeValue) (string, error) {
