@@ -3,27 +3,27 @@ package main
 import "fmt"
 
 type routingTable struct {
-	ownNodeId  nodeId
-	bucketSize int
-	table      []bucket
+	thisDhtNode dhtNode
+	bucketSize  int
+	table       []bucket
 }
 
-func newRoutingTable(bucketSize int, ownNodeId nodeId) routingTable {
+func newRoutingTable(bucketSize int, thisDhtNode dhtNode) routingTable {
 	// Technically we don't need all 160 buckets, since there are only 8 nodes with common
 	// longest prefix length of 157, so bucket 157 will never be split.
 	var initialTable = make([]bucket, 0, 160)
 	initialTable = append(initialTable, newBucket(bucketSize))
 
 	return routingTable{
-		ownNodeId:  ownNodeId,
-		bucketSize: bucketSize,
-		table:      initialTable,
+		thisDhtNode: thisDhtNode,
+		bucketSize:  bucketSize,
+		table:       initialTable,
 	}
 }
 
 func (t *routingTable) addEntry(entry dhtNode) {
 	var currentMaxPrefixLength = len(t.table) - 1
-	var prefixLength = commonPrefixLength(t.ownNodeId, entry.nodeId)
+	var prefixLength = commonPrefixLength(t.thisDhtNode.nodeId, entry.nodeId)
 	var bucketIndex = min(prefixLength, currentMaxPrefixLength)
 	var bucket = t.table[bucketIndex]
 
@@ -44,7 +44,7 @@ func (t *routingTable) addEntry(entry dhtNode) {
 	// shorter common prefix at this current index and append the one with the longer common prefix to the table (thereby
 	// extending the prefix length the routing table covers).
 	var zeroBucket, oneBucket = bucket.splitAt(bucketIndex)
-	if t.ownNodeId.isBitSet(bucketIndex) {
+	if t.thisDhtNode.nodeId.isBitSet(bucketIndex) {
 		// Own bit is set, so the common prefix for the zero bucket ends here, and it stays behind at bucketIndex.
 		t.table[bucketIndex] = zeroBucket
 		t.table = append(t.table, oneBucket)
@@ -59,7 +59,7 @@ func (t *routingTable) addEntry(entry dhtNode) {
 
 func (t *routingTable) findNode(targetId nodeId) (result []dhtNode, exactMatch bool) {
 	var currentMaxPrefixLength = len(t.table) - 1
-	var prefixLength = commonPrefixLength(t.ownNodeId, targetId)
+	var prefixLength = commonPrefixLength(t.thisDhtNode.nodeId, targetId)
 	var startBucketIndex = min(prefixLength, currentMaxPrefixLength)
 	result = make([]dhtNode, 0, t.bucketSize)
 

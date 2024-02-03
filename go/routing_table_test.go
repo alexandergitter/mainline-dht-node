@@ -10,7 +10,7 @@ func TestRoutingTableAddEntry(t *testing.T) {
 	var nearId1 = hexStringToNodeId("7000000000000000000000000000000000000000")
 	var nearId2 = hexStringToNodeId("0000000000ffffffffffffffffffffffffffffff")
 
-	var table = newRoutingTable(2, ownId)
+	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
 	table.addEntry(dhtNode{nodeId: distantId1})
 	table.addEntry(dhtNode{nodeId: distantId1})
 
@@ -63,7 +63,7 @@ func TestRoutingTableFindNode(t *testing.T) {
 	var nodeId3 = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
 	var nodeId4 = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
 
-	var table = newRoutingTable(2, ownId)
+	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
 	table.addEntry(dhtNode{nodeId: nodeId1})
 	table.addEntry(dhtNode{nodeId: nodeId2})
 	table.addEntry(dhtNode{nodeId: nodeId3})

@@ -40,7 +40,7 @@ func main() {
 	var node5 = hexStringToNodeId("4102030405060708090a0b0c0d0e0f1011121319")
 	var node6 = hexStringToNodeId("3000000000000011111111111111111111111111")
 
-	var table = newRoutingTable(2, ownId)
+	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
 	table.addEntry(dhtNode{nodeId: node1})
 	table.addEntry(dhtNode{nodeId: node2})
 	table.addEntry(dhtNode{nodeId: node3})
@@ -54,7 +54,7 @@ func main() {
 	var nodeId3 = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
 	var nodeId4 = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
 
-	table = newRoutingTable(2, ownId)
+	table = newRoutingTable(2, dhtNode{nodeId: ownId})
 	table.addEntry(dhtNode{nodeId: nodeId1})
 	table.addEntry(dhtNode{nodeId: nodeId2})
 	table.addEntry(dhtNode{nodeId: nodeId3})
