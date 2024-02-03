@@ -8,13 +8,12 @@ use cursive::Cursive;
 use fixed_vec::FixedVec;
 use rand::prelude::*;
 use std::collections::VecDeque;
-use std::mem::MaybeUninit;
-use std::net::{SocketAddrV4, ToSocketAddrs, UdpSocket};
-use std::ops::{Index, IndexMut, Range};
+use std::net::{SocketAddrV4, UdpSocket};
+use std::ops::{Range};
 use std::str;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 struct MyInfo {
@@ -31,7 +30,7 @@ const BOOTSTRAP_NODE: &str = "router.bittorrent.com:6881";
 
 fn main() {
     let (gui_tx, net_rx) = mpsc::channel::<NetCommand>();
-    let (net_tx, gui_rx) = mpsc::channel::<Box<std::fmt::Display + Send>>();
+    let (net_tx, gui_rx) = mpsc::channel::<Box<dyn std::fmt::Display + Send>>();
 
     thread::spawn(move || {
         let mut my_node_id = [0u8; 20];

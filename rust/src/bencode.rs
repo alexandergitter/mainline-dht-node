@@ -93,7 +93,7 @@ impl<'a> Decoder<'a> {
     fn decode_value(&mut self) -> Result<Bencode, DecoderError> {
         match self.cursor.peek_byte()? {
             b'i' => self.decode_int(),
-            b'0'...b'9' => self.decode_bytestring(),
+            b'0'..=b'9' => self.decode_bytestring(),
             b'l' => self.decode_list(),
             b'd' => self.decode_dict(),
             _ => Err(DecoderError::UnexpectedStartOfValue),
