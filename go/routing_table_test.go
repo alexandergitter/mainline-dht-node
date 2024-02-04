@@ -108,3 +108,17 @@ func TestRoutingTableFindNode(t *testing.T) {
 		t.Error("Expected all from bucket 5, got: ", result)
 	}
 }
+
+func TestRoutingTableFindOwnNode(t *testing.T) {
+	var ownId = hexStringToNodeId("1234000000000000000000000000000000000000")
+	var nodeId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var nodeId2 = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
+	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
+	table.addEntry(dhtNode{nodeId: nodeId1})
+	table.addEntry(dhtNode{nodeId: nodeId2})
+
+	var result, exactMatch = table.findNode(ownId)
+	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(ownId) {
+		t.Error("Expected exact match with node entry")
+	}
+}

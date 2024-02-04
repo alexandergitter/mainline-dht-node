@@ -58,6 +58,10 @@ func (t *routingTable) addEntry(entry dhtNode) {
 }
 
 func (t *routingTable) findNode(targetId nodeId) (result []dhtNode, exactMatch bool) {
+	if t.thisDhtNode.nodeId.isEqual(targetId) {
+		return []dhtNode{t.thisDhtNode}, true
+	}
+
 	var currentMaxPrefixLength = len(t.table) - 1
 	var prefixLength = commonPrefixLength(t.thisDhtNode.nodeId, targetId)
 	var startBucketIndex = min(prefixLength, currentMaxPrefixLength)
