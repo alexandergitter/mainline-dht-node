@@ -54,6 +54,20 @@ func (n dhtNode) String() string {
 	return fmt.Sprintf("dhtNode{%s}", n.nodeId)
 }
 
+func decodeCompactNodeInfo(data string) dhtNode {
+	if len(data) != 26 {
+		panic("Invalid compact node info length")
+	}
+
+	return dhtNode{
+		nodeId: nodeId([]byte(data[:20])),
+		address: net.UDPAddr{
+			IP:   net.IPv4(data[20], data[21], data[22], data[23]),
+			Port: int(binary.BigEndian.Uint16([]byte(data[24:]))),
+		},
+	}
+}
+
 // Helpers
 
 func bytesToHexString(b []byte) string {

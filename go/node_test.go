@@ -61,8 +61,13 @@ func TestCompactNodeInfo(t *testing.T) {
 		},
 	}
 
-	var expected = hexStringToBytes("000100020003000400050006000700080009000a0c22384e9876")
-	if node.compactNodeInfo() != string(expected) {
-		t.Error("Expected", bytesToHexString(expected), "but got", bytesToHexString([]byte(node.compactNodeInfo())))
+	var compactBytes = hexStringToBytes("000100020003000400050006000700080009000a0c22384e9876")
+	if node.compactNodeInfo() != string(compactBytes) {
+		t.Error("Expected", bytesToHexString(compactBytes), "but got", bytesToHexString([]byte(node.compactNodeInfo())))
+	}
+
+	var decoded = decodeCompactNodeInfo(string(compactBytes))
+	if !decoded.nodeId.isEqual(id) || decoded.address.IP.String() != "12.34.56.78" || decoded.address.Port != 0x9876 {
+		t.Error("Got wrong decoded node info")
 	}
 }
