@@ -7,15 +7,13 @@ import (
 
 type bucket struct {
 	bucketSize int
-	occupied   []bool
 	entries    []dhtNode
 }
 
 func newBucket(bucketSize int) bucket {
 	return bucket{
 		bucketSize: bucketSize,
-		occupied:   make([]bool, bucketSize),
-		entries:    make([]dhtNode, bucketSize),
+		entries:    make([]dhtNode, 0, bucketSize),
 	}
 }
 
@@ -24,20 +22,17 @@ func (b bucket) addEntry(entry dhtNode) (updated bucket, success bool) {
 		return b, true
 	}
 
-	for i, occupied := range b.occupied {
-		if !occupied {
-			b.occupied[i] = true
-			b.entries[i] = entry
-			return b, true
-		}
+	if len(b.entries) >= b.bucketSize {
+		return b, false
 	}
 
-	return b, false
+	b.entries = append(b.entries, entry)
+	return b, true
 }
 
 func (b bucket) containsNodeId(id nodeId) bool {
-	for i, occupied := range b.occupied {
-		if occupied && b.entries[i].nodeId.isEqual(id) {
+	for _, entry := range b.entries {
+		if entry.nodeId.isEqual(id) {
 			return true
 		}
 	}
@@ -46,19 +41,13 @@ func (b bucket) containsNodeId(id nodeId) bool {
 }
 
 func (b bucket) getEntryByIdOrReturnAll(id nodeId) (result []dhtNode, exactMatch bool) {
-	result = make([]dhtNode, 0, b.bucketSize)
-
-	for i, occupied := range b.occupied {
-		if occupied {
-			result = append(result, b.entries[i])
-
-			if b.entries[i].nodeId.isEqual(id) {
-				return result[len(result)-1:], true
-			}
+	for i, entry := range b.entries {
+		if entry.nodeId.isEqual(id) {
+			return b.entries[i : i+1], true
 		}
 	}
 
-	return result, false
+	return b.entries, false
 }
 
 func (b bucket) splitAt(bitPosition int) (zeroBucket bucket, oneBucket bucket) {
@@ -69,17 +58,11 @@ func (b bucket) splitAt(bitPosition int) (zeroBucket bucket, oneBucket bucket) {
 	zeroBucket = newBucket(b.bucketSize)
 	oneBucket = newBucket(b.bucketSize)
 
-	for i, occupied := range b.occupied {
-		if !occupied {
-			continue
-		}
-
-		if b.entries[i].nodeId.isBitSet(bitPosition) {
-			oneBucket.occupied[i] = true
-			oneBucket.entries[i] = b.entries[i]
+	for _, entry := range b.entries {
+		if entry.nodeId.isBitSet(bitPosition) {
+			oneBucket, _ = oneBucket.addEntry(entry)
 		} else {
-			zeroBucket.occupied[i] = true
-			zeroBucket.entries[i] = b.entries[i]
+			zeroBucket, _ = zeroBucket.addEntry(entry)
 		}
 	}
 
@@ -88,12 +71,14 @@ func (b bucket) splitAt(bitPosition int) (zeroBucket bucket, oneBucket bucket) {
 
 func (b bucket) String() string {
 	var builder strings.Builder
-	for i, occupied := range b.occupied {
-		if occupied {
-			builder.WriteString(fmt.Sprintf("%s ", b.entries[i].nodeId))
-		} else {
+
+	for i := 0; i < b.bucketSize; i++ {
+		if i >= len(b.entries) {
 			builder.WriteString("---------------------------------------- ")
+		} else {
+			builder.WriteString(fmt.Sprintf("%s ", b.entries[i].nodeId))
 		}
 	}
+
 	return builder.String()
 }

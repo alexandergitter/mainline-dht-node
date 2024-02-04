@@ -12,10 +12,11 @@ func TestRoutingTableAddEntry(t *testing.T) {
 
 	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
 	table.addEntry(dhtNode{nodeId: distantId1})
+	var sizeBeforeDuplicateAdded = len(table.table[0].entries)
 	table.addEntry(dhtNode{nodeId: distantId1})
 
-	if table.table[0].occupied[0] == true && table.table[0].occupied[1] == true {
-		t.Error("Buckets must not contain duplicate entries")
+	if len(table.table[0].entries) != sizeBeforeDuplicateAdded {
+		t.Error("Expected addEntry to not add duplicate entry")
 	}
 
 	table.addEntry(dhtNode{nodeId: distantId2})
