@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 )
@@ -24,43 +26,105 @@ func getMyIp() (net.IP, error) {
 	return result, nil
 }
 
+func buildPing(transactionId string, ownNodeId nodeId) krpcQuery {
+	return krpcQuery{
+		transactionId: transactionId,
+		methodName:    "ping",
+		arguments:     bencodeDict{"id": bencodeString(ownNodeId[:])},
+	}
+}
+
+func buildResponse(transactionId string, res bencodeDict) krpcResponse {
+	return krpcResponse{
+		transactionId: transactionId,
+		response:      res,
+	}
+}
+
+type envelope struct {
+	address *net.UDPAddr
+	message krpcMessage
+}
+
+func receiver(conn *net.UDPConn, data chan envelope) {
+	buffer := make([]byte, 65535)
+
+	for {
+		fmt.Println("Waiting for messages...")
+
+		n, udp, err := conn.ReadFromUDP(buffer)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		fmt.Println("Received", n, "bytes", "from", udp)
+
+		dict, err := decodeBencodeDict(string(buffer[:n]))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		// TODO: If this is an invalid KRPC message, we should send an error response. For now, just log and continue
+		krpc, err := decodeKrpcMessage(dict)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		data <- envelope{
+			address: udp,
+			message: krpc,
+		}
+	}
+}
+
+func sender(conn *net.UDPConn, data chan envelope) {
+	for {
+		select {
+		case env := <-data:
+			_, err := conn.WriteToUDP([]byte(env.message.encode()), env.address)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+}
+
 func main() {
-	var ownId = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var ownId = nodeId{}
+	_, err := rand.Read(ownId[:])
+	if err != nil {
+		log.Fatalf("error while generating node id: %s", err)
+	}
 
-	//var ownId = make([]byte, 20)
-	//_, err := rand.Read(ownId)
-	//if err != nil {
-	//	log.Fatal("Could not generate random node ID", err)
-	//}
-
-	var node1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var node2 = hexStringToNodeId("4000000000000000000000000000000000000001")
-	var node3 = hexStringToNodeId("fffffffffffffffffffffffffffffffffffffffe")
-	var node4 = hexStringToNodeId("7000000000000000000000000000000000000000")
-	var node5 = hexStringToNodeId("4102030405060708090a0b0c0d0e0f1011121319")
-	var node6 = hexStringToNodeId("3000000000000011111111111111111111111111")
-
-	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
-	table.addEntry(dhtNode{nodeId: node1})
-	table.addEntry(dhtNode{nodeId: node2})
-	table.addEntry(dhtNode{nodeId: node3})
-	table.addEntry(dhtNode{nodeId: node4})
-	table.addEntry(dhtNode{nodeId: node5})
-	table.addEntry(dhtNode{nodeId: node6})
+	var table = newRoutingTable(ENTRIES, dhtNode{nodeId: ownId})
 	printRoutingTable(table)
 
-	var nodeId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var nodeId2 = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
-	var nodeId3 = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
-	var nodeId4 = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
+	listenOn, err := net.ResolveUDPAddr("udp", "127.0.0.1:6880")
+	conn, err := net.ListenUDP("udp", listenOn)
+	if err != nil {
+		panic(err)
+	}
 
-	table = newRoutingTable(2, dhtNode{nodeId: ownId})
-	table.addEntry(dhtNode{nodeId: nodeId1})
-	table.addEntry(dhtNode{nodeId: nodeId2})
-	table.addEntry(dhtNode{nodeId: nodeId3})
-	table.addEntry(dhtNode{nodeId: nodeId4})
-	printRoutingTable(table)
+	senderChannel := make(chan envelope)
+	receiverChannel := make(chan envelope)
 
-	v, _ := decodeBencodeValue("d1:yli324ee1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aae")
-	fmt.Println(v)
+	go receiver(conn, receiverChannel)
+	go sender(conn, senderChannel)
+
+	for {
+		senderChannel <- envelope{
+			address: listenOn,
+			message: buildPing("123", ownId),
+		}
+
+		select {
+		case env := <-receiverChannel:
+			fmt.Println(env)
+		default:
+			fmt.Scanln()
+		}
+	}
 }
