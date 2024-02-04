@@ -62,21 +62,12 @@ func (c *scanner) acceptRun(length int) (string, error) {
 	return result, nil
 }
 
-type bencodeType int
 type bencodeInt int
 type bencodeString string
 type bencodeList []bencodeValue
 type bencodeDict map[string]bencodeValue
 
-const (
-	BencodeInteger bencodeType = iota
-	BencodeString
-	BencodeList
-	BencodeDict
-)
-
 type bencodeValue interface {
-	kind() bencodeType
 	encode() string
 	String() string
 }
@@ -89,20 +80,12 @@ func (i bencodeInt) String() string {
 	return fmt.Sprintf("%d", i)
 }
 
-func (i bencodeInt) kind() bencodeType {
-	return BencodeInteger
-}
-
 func (s bencodeString) encode() string {
 	return fmt.Sprintf("%d:%s", len(s), s)
 }
 
 func (s bencodeString) String() string {
 	return string(s)
-}
-
-func (s bencodeString) kind() bencodeType {
-	return BencodeString
 }
 
 func (l bencodeList) encode() string {
@@ -128,10 +111,6 @@ func (l bencodeList) String() string {
 	}
 	buffer.WriteString("]")
 	return buffer.String()
-}
-
-func (l bencodeList) kind() bencodeType {
-	return BencodeList
 }
 
 func (d bencodeDict) encode() string {
@@ -174,10 +153,6 @@ func (d bencodeDict) String() string {
 	}
 	buffer.WriteString(" }")
 	return buffer.String()
-}
-
-func (d bencodeDict) kind() bencodeType {
-	return BencodeDict
 }
 
 func parseInteger(scanner *scanner) (int, error) {

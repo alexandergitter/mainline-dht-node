@@ -71,68 +71,56 @@ func (err krpcError) encode() string {
 }
 
 func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
-	var t = data["t"]
-	if t == nil || t.kind() != BencodeString {
-		return nil, fmt.Errorf("KRCP transaction ID is not a string")
+	var t, tValid = data["t"].(bencodeString)
+	var y, yValid = data["y"].(bencodeString)
+
+	if !tValid || !yValid {
+		return nil, fmt.Errorf("Transaction id or KRPC message type are missing or invalid")
 	}
 
-	var y = data["y"]
-	if y == nil || y.kind() != BencodeString {
-		return nil, fmt.Errorf("KRPC Message type is not a string")
-	}
-
-	switch string(y.(bencodeString)) {
+	switch string(y) {
 	case KrpcTypeQuery:
-		var q = data["q"]
-		if q == nil || q.kind() != BencodeString {
-			return nil, fmt.Errorf("Query method is not a string")
-		}
+		var q, qValid = data["q"].(bencodeString)
+		var a, aValid = data["a"].(bencodeDict)
 
-		var a = data["a"]
-		if a == nil || a.kind() != BencodeDict {
-			return nil, fmt.Errorf("Query arguments is not a dictionary")
+		if !qValid || !aValid {
+			return nil, fmt.Errorf("Query method or arguments are missing or invalid")
 		}
 
 		return krpcQuery{
-			transactionId: string(t.(bencodeString)),
-			methodName:    string(q.(bencodeString)),
-			arguments:     a.(bencodeDict),
+			transactionId: string(t),
+			methodName:    string(q),
+			arguments:     a,
 		}, nil
 	case KrpcTypeReply:
-		var r = data["r"]
-		if r == nil || r.kind() != BencodeDict {
+		var r, rValid = data["r"].(bencodeDict)
+
+		if !rValid {
 			return nil, fmt.Errorf("Response is not a dictionary")
 		}
 
 		return krpcResponse{
-			transactionId: string(t.(bencodeString)),
-			response:      r.(bencodeDict),
+			transactionId: string(t),
+			response:      r,
 		}, nil
 	case KrpcTypeError:
-		var e = data["e"]
-		if e == nil || e.kind() != BencodeList {
-			return nil, fmt.Errorf("Error is not a list")
+		var e, eValid = data["e"].(bencodeList)
+
+		if !eValid || len(e) != 2 {
+			return nil, fmt.Errorf("Error is not a two-element list")
 		}
 
-		var l = e.(bencodeList)
-		if l == nil || len(l) != 2 {
-			return nil, fmt.Errorf("Error list does not have two elements")
-		}
+		var code, codeValid = e[0].(bencodeInt)
+		var message, messageValid = e[1].(bencodeString)
 
-		var code = l[0]
-		if code == nil || code.kind() != BencodeInteger {
-			return nil, fmt.Errorf("Error code is not an integer")
-		}
-
-		var message = l[1]
-		if message == nil || message.kind() != BencodeString {
-			return nil, fmt.Errorf("Error message is not a string")
+		if !codeValid || !messageValid {
+			return nil, fmt.Errorf("Error code or message are missing or invalid")
 		}
 
 		return krpcError{
-			transactionId: string(t.(bencodeString)),
-			kind:          int(code.(bencodeInt)),
-			message:       string(message.(bencodeString)),
+			transactionId: string(t),
+			kind:          int(code),
+			message:       string(message),
 		}, nil
 	default:
 		return nil, fmt.Errorf("Unknown KRPC message type")
