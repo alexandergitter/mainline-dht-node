@@ -120,25 +120,25 @@ func TestDecodeDict(t *testing.T) {
 
 func TestDecodeValue(t *testing.T) {
 	var input = "i123e"
-	var result, err = decodeValue(&scanner{input: input})
+	var result, err = decodeScannerBencodeValue(&scanner{input: input})
 	if result.(bencodeInt) != 123 || err != nil {
 		t.Error("expected 123, got", result, "err:", err)
 	}
 
 	input = "4:spam"
-	result, err = decodeValue(&scanner{input: input})
+	result, err = decodeScannerBencodeValue(&scanner{input: input})
 	if result.(bencodeString) != "spam" || err != nil {
 		t.Error("expected \"spam\", got", result, "err:", err)
 	}
 
 	input = "l4:spami123ee"
-	result, err = decodeValue(&scanner{input: input})
+	result, err = decodeScannerBencodeValue(&scanner{input: input})
 	if err != nil {
 		t.Error("Expected", input, "to return a list")
 	}
 
 	input = "d3:cow3:moo4:spam4:eggse"
-	result, err = decodeValue(&scanner{input: input})
+	result, err = decodeScannerBencodeValue(&scanner{input: input})
 	if err != nil {
 		t.Error("Expected", input, "to return a dict")
 	}
@@ -146,26 +146,26 @@ func TestDecodeValue(t *testing.T) {
 
 func TestEncodeValue(t *testing.T) {
 	var input bencodeValue = bencodeInt(123)
-	var result, err = encodeValue(input)
-	if result != "i123e" || err != nil {
-		t.Error("expected \"i123e\", got", result, err)
+	var result = input.encode()
+	if result != "i123e" {
+		t.Error("expected \"i123e\", got", result)
 	}
 
 	input = bencodeString("spam")
-	result, err = encodeValue(input)
-	if result != "4:spam" || err != nil {
-		t.Error("expected \"4:spam\", got", result, err)
+	result = input.encode()
+	if result != "4:spam" {
+		t.Error("expected \"4:spam\", got", result)
 	}
 
 	input = bencodeList{bencodeString("spam"), bencodeInt(123)}
-	result, err = encodeValue(input)
-	if result != "l4:spami123ee" || err != nil {
-		t.Error("expected \"l4:spami123ee\", got", result, err)
+	result = input.encode()
+	if result != "l4:spami123ee" {
+		t.Error("expected \"l4:spami123ee\", got", result)
 	}
 
 	input = bencodeDict{"dog": bencodeString("woof"), "cow": bencodeString("moo")}
-	result, err = encodeValue(input)
-	if result != "d3:cow3:moo3:dog4:woofe" || err != nil {
-		t.Error("expected \"d3:cow3:moo3:dog4:woofe\", got", result, err)
+	result = input.encode()
+	if result != "d3:cow3:moo3:dog4:woofe" {
+		t.Error("expected \"d3:cow3:moo3:dog4:woofe\", got", result)
 	}
 }

@@ -61,6 +61,6 @@ func main() {
 	table.addEntry(dhtNode{nodeId: nodeId4})
 	printRoutingTable(table)
 
-	v, _ := decodeBencode("d1:yli324ee1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aae")
-	fmt.Println(bencodeValueToString(v))
+	v, _ := decodeBencodeValue("d1:yli324ee1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aae")
+	fmt.Println(v)
 }

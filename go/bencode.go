@@ -76,23 +76,91 @@ const (
 )
 
 type bencodeValue interface {
-	Type() bencodeType
+	encode() string
+	String() string
 }
 
-func (i bencodeInt) Type() bencodeType {
-	return BencodeInteger
+func (i bencodeInt) encode() string {
+	return fmt.Sprintf("i%de", i)
 }
 
-func (s bencodeString) Type() bencodeType {
-	return BencodeString
+func (i bencodeInt) String() string {
+	return fmt.Sprintf("%d", i)
 }
 
-func (l bencodeList) Type() bencodeType {
-	return BencodeList
+func (s bencodeString) encode() string {
+	return fmt.Sprintf("%d:%s", len(s), s)
 }
 
-func (d bencodeDict) Type() bencodeType {
-	return BencodeDict
+func (s bencodeString) String() string {
+	return string(s)
+}
+
+func (l bencodeList) encode() string {
+	var buffer strings.Builder
+	buffer.WriteString("l")
+
+	for _, v := range l {
+		buffer.WriteString(v.encode())
+	}
+
+	buffer.WriteString("e")
+	return buffer.String()
+}
+
+func (l bencodeList) String() string {
+	var buffer strings.Builder
+	buffer.WriteString("[")
+	for i, v := range l {
+		if i > 0 {
+			buffer.WriteString(", ")
+		}
+		buffer.WriteString(v.String())
+	}
+	buffer.WriteString("]")
+	return buffer.String()
+}
+
+func (d bencodeDict) encode() string {
+	var buffer strings.Builder
+	buffer.WriteString("d")
+
+	var keys = make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		buffer.WriteString(bencodeString(k).encode())
+		buffer.WriteString(d[k].encode())
+	}
+
+	buffer.WriteString("e")
+	return buffer.String()
+}
+
+func (d bencodeDict) String() string {
+	var buffer strings.Builder
+	buffer.WriteString("{ ")
+	var keys = make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for i, k := range keys {
+		if i > 0 {
+			buffer.WriteString(", ")
+		}
+		buffer.WriteString(bencodeString(k).String())
+		buffer.WriteString(": ")
+		buffer.WriteString(d[k].String())
+	}
+	buffer.WriteString(" }")
+	return buffer.String()
 }
 
 func parseInteger(scanner *scanner) (int, error) {
@@ -152,7 +220,7 @@ func decodeList(scanner *scanner) (bencodeList, error) {
 		if _, found := scanner.acceptSingle("e"); found {
 			return result, nil
 		} else {
-			var value, err = decodeValue(scanner)
+			var value, err = decodeScannerBencodeValue(scanner)
 			if err != nil {
 				return nil, err
 			}
@@ -178,7 +246,7 @@ func decodeDict(scanner *scanner) (bencodeDict, error) {
 				return nil, err
 			}
 
-			value, err := decodeValue(scanner)
+			value, err := decodeScannerBencodeValue(scanner)
 			if err != nil {
 				return nil, err
 			}
@@ -188,7 +256,7 @@ func decodeDict(scanner *scanner) (bencodeDict, error) {
 	}
 }
 
-func decodeValue(scanner *scanner) (bencodeValue, error) {
+func decodeScannerBencodeValue(scanner *scanner) (bencodeValue, error) {
 	var c, eof = scanner.peek()
 	if eof {
 		return nil, fmt.Errorf("unexpected end of input")
@@ -206,100 +274,7 @@ func decodeValue(scanner *scanner) (bencodeValue, error) {
 	}
 }
 
-func decodeBencode(input string) (bencodeValue, error) {
+func decodeBencodeValue(input string) (bencodeValue, error) {
 	var scanner = &scanner{input: input}
-	return decodeValue(scanner)
-}
-
-func encodeValue(value bencodeValue) (string, error) {
-	switch value.Type() {
-	case BencodeInteger:
-		return fmt.Sprintf("i%de", value.(bencodeInt)), nil
-	case BencodeString:
-		return fmt.Sprintf("%d:%s", len(value.(bencodeString)), value.(bencodeString)), nil
-	case BencodeList:
-		var buffer strings.Builder
-		buffer.WriteString("l")
-
-		for _, v := range value.(bencodeList) {
-			s, err := encodeValue(v)
-			if err != nil {
-				return "", err
-			}
-
-			buffer.WriteString(s)
-		}
-
-		buffer.WriteString("e")
-		return buffer.String(), nil
-	case BencodeDict:
-		var buffer strings.Builder
-		buffer.WriteString("d")
-
-		var keys = make([]string, 0, len(value.(bencodeDict)))
-		for k := range value.(bencodeDict) {
-			keys = append(keys, k)
-		}
-
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			s, err := encodeValue(bencodeString(k))
-			if err != nil {
-				return "", err
-			}
-
-			buffer.WriteString(s)
-
-			s, err = encodeValue(value.(bencodeDict)[k])
-			if err != nil {
-				return "", err
-			}
-
-			buffer.WriteString(s)
-		}
-
-		buffer.WriteString("e")
-		return buffer.String(), nil
-	default:
-		return "", fmt.Errorf("unknown bencode type")
-	}
-}
-
-func bencodeValueToString(value bencodeValue) string {
-	var buffer strings.Builder
-	switch value.Type() {
-	case BencodeInteger:
-		buffer.WriteString(fmt.Sprintf("%d", value.(bencodeInt)))
-	case BencodeString:
-		buffer.WriteString(fmt.Sprintf("%s", value.(bencodeString)))
-	case BencodeList:
-		buffer.WriteString("[")
-		for i, v := range value.(bencodeList) {
-			if i > 0 {
-				buffer.WriteString(", ")
-			}
-			buffer.WriteString(bencodeValueToString(v))
-		}
-		buffer.WriteString("]")
-	case BencodeDict:
-		buffer.WriteString("{ ")
-		var keys = make([]string, 0, len(value.(bencodeDict)))
-		for k := range value.(bencodeDict) {
-			keys = append(keys, k)
-		}
-
-		for i, k := range keys {
-			if i > 0 {
-				buffer.WriteString(", ")
-			}
-			buffer.WriteString(bencodeValueToString(bencodeString(k)))
-			buffer.WriteString(": ")
-			buffer.WriteString(bencodeValueToString(value.(bencodeDict)[k]))
-		}
-		buffer.WriteString(" }")
-	default:
-		buffer.WriteString("(unknown bencode type)")
-	}
-	return buffer.String()
+	return decodeScannerBencodeValue(scanner)
 }
