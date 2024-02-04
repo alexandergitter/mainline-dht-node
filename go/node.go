@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/bits"
 	"net"
@@ -20,11 +21,7 @@ func (n nodeId) isEqual(other nodeId) bool {
 }
 
 func (n nodeId) String() string {
-	var builder strings.Builder
-	for _, b := range n {
-		builder.WriteString(fmt.Sprintf("%02x", b))
-	}
-	return builder.String()
+	return bytesToHexString(n[:])
 }
 
 // This could benefit from some SIMD instructions
@@ -45,26 +42,48 @@ type dhtNode struct {
 	address net.UDPAddr
 }
 
+func (n dhtNode) compactNodeInfo() string {
+	var buffer = make([]byte, 0, 26)
+	buffer = append(buffer, n.nodeId[:]...)
+	buffer = append(buffer, n.address.IP.To4()...)
+	buffer = binary.BigEndian.AppendUint16(buffer, uint16(n.address.Port))
+	return string(buffer)
+}
+
 func (n dhtNode) String() string {
 	return fmt.Sprintf("dhtNode{%s}", n.nodeId)
 }
 
 // Helpers
 
-func hexStringToNodeId(s string) nodeId {
-	var result nodeId
+func bytesToHexString(b []byte) string {
+	var builder strings.Builder
+	for _, v := range b {
+		builder.WriteString(fmt.Sprintf("%02x", v))
+	}
+	return builder.String()
+}
 
-	if len(s) != 40 {
+func hexStringToBytes(s string) []byte {
+	if len(s)%2 != 0 {
 		panic("Invalid hex string length")
 	}
 
-	for i := 0; i < 20; i++ {
+	result := make([]byte, len(s)/2)
+	for i := 0; i < len(s)/2; i++ {
 		if b, err := strconv.ParseUint(s[2*i:2*i+2], 16, 8); err != nil {
 			panic(err)
 		} else {
 			result[i] = byte(b)
 		}
 	}
-
 	return result
+}
+
+func hexStringToNodeId(s string) nodeId {
+	if len(s) != 40 {
+		panic("Invalid hex string length")
+	}
+
+	return nodeId(hexStringToBytes(s))
 }

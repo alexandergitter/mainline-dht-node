@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 func TestNodeIdBitSet(t *testing.T) {
 	var id = hexStringToNodeId("9000000080000000000000000000000000000001")
@@ -45,5 +48,21 @@ func TestLongestCommonPrefixLength(t *testing.T) {
 	}
 	if commonPrefixLength(a, e) != 9 {
 		t.Error("Expected 9")
+	}
+}
+
+func TestCompactNodeInfo(t *testing.T) {
+	var id = hexStringToNodeId("000100020003000400050006000700080009000a")
+	var node = dhtNode{
+		nodeId: id,
+		address: net.UDPAddr{
+			IP:   net.ParseIP("12.34.56.78"),
+			Port: 0x9876,
+		},
+	}
+
+	var expected = hexStringToBytes("000100020003000400050006000700080009000a0c22384e9876")
+	if node.compactNodeInfo() != string(expected) {
+		t.Error("Expected", bytesToHexString(expected), "but got", bytesToHexString([]byte(node.compactNodeInfo())))
 	}
 }
