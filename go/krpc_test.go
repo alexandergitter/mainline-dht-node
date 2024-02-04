@@ -5,7 +5,7 @@ import "testing"
 func TestKrpcError(t *testing.T) {
 	var err = krpcError{
 		transactionId: "aa",
-		kind:          KrpcErrorGeneric,
+		code:          KrpcErrorGeneric,
 		message:       "An Error",
 	}
 
