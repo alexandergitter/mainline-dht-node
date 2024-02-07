@@ -72,8 +72,7 @@ func (b bucket) splitAt(bitPosition int) (zeroBucket bucket, oneBucket bucket) {
 func (b bucket) String() string {
 	var builder strings.Builder
 
-	// TODO: With Go 1.22, this can be replaced with for i := range b.bucketSize
-	for i := 0; i < b.bucketSize; i++ {
+	for i := range b.bucketSize {
 		if i >= len(b.entries) {
 			builder.WriteString("---------------------------------------- ")
 		} else {
