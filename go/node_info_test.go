@@ -53,7 +53,7 @@ func TestLongestCommonPrefixLength(t *testing.T) {
 
 func TestCompactNodeInfo(t *testing.T) {
 	var id = hexStringToNodeId("000100020003000400050006000700080009000a")
-	var node = dhtNode{
+	var node = nodeInfo{
 		nodeId: id,
 		address: net.UDPAddr{
 			IP:   net.ParseIP("12.34.56.78"),

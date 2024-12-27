@@ -3,7 +3,7 @@ package main
 import "fmt"
 
 type dhtClient struct {
-	thisNodeInfo dhtNode
+	thisNodeInfo nodeInfo
 	routingTable routingTable
 }
 

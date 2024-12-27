@@ -37,12 +37,12 @@ func commonPrefixLength(a, b nodeId) int {
 	return result
 }
 
-type dhtNode struct {
+type nodeInfo struct {
 	nodeId  nodeId
 	address net.UDPAddr
 }
 
-func (n dhtNode) compactNodeInfo() string {
+func (n nodeInfo) compactNodeInfo() string {
 	var buffer = make([]byte, 0, 26)
 	buffer = append(buffer, n.nodeId[:]...)
 	buffer = append(buffer, n.address.IP.To4()...)
@@ -50,16 +50,16 @@ func (n dhtNode) compactNodeInfo() string {
 	return string(buffer)
 }
 
-func (n dhtNode) String() string {
-	return fmt.Sprintf("dhtNode{%s}", n.nodeId)
+func (n nodeInfo) String() string {
+	return fmt.Sprintf("nodeInfo{%s}", n.nodeId)
 }
 
-func decodeCompactNodeInfo(data string) dhtNode {
+func decodeCompactNodeInfo(data string) nodeInfo {
 	if len(data) != 26 {
 		panic("Invalid compact node info length")
 	}
 
-	return dhtNode{
+	return nodeInfo{
 		nodeId: nodeId([]byte(data[:20])),
 		address: net.UDPAddr{
 			IP:   net.IPv4(data[20], data[21], data[22], data[23]),

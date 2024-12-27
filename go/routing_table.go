@@ -3,27 +3,27 @@ package main
 import "fmt"
 
 type routingTable struct {
-	thisDhtNode dhtNode
-	bucketSize  int
-	table       []bucket
+	thisNodeInfo nodeInfo
+	bucketSize   int
+	table        []bucket
 }
 
-func newRoutingTable(bucketSize int, thisDhtNode dhtNode) routingTable {
+func newRoutingTable(bucketSize int, thisNodeInfo nodeInfo) routingTable {
 	// Technically we don't need all 160 buckets, since there are only 8 nodes with common
 	// longest prefix length of 157, so bucket 157 will never be split.
 	var initialTable = make([]bucket, 0, 160)
 	initialTable = append(initialTable, newBucket(bucketSize))
 
 	return routingTable{
-		thisDhtNode: thisDhtNode,
-		bucketSize:  bucketSize,
-		table:       initialTable,
+		thisNodeInfo: thisNodeInfo,
+		bucketSize:   bucketSize,
+		table:        initialTable,
 	}
 }
 
-func (t *routingTable) addEntry(entry dhtNode) {
+func (t *routingTable) addEntry(entry nodeInfo) {
 	var currentMaxPrefixLength = len(t.table) - 1
-	var prefixLength = commonPrefixLength(t.thisDhtNode.nodeId, entry.nodeId)
+	var prefixLength = commonPrefixLength(t.thisNodeInfo.nodeId, entry.nodeId)
 	var bucketIndex = min(prefixLength, currentMaxPrefixLength)
 	var bucket = t.table[bucketIndex]
 
@@ -44,7 +44,7 @@ func (t *routingTable) addEntry(entry dhtNode) {
 	// shorter common prefix at this current index and append the one with the longer common prefix to the table (thereby
 	// extending the prefix length the routing table covers).
 	var zeroBucket, oneBucket = bucket.splitAt(bucketIndex)
-	if t.thisDhtNode.nodeId.isBitSet(bucketIndex) {
+	if t.thisNodeInfo.nodeId.isBitSet(bucketIndex) {
 		// Own bit is set, so the common prefix for the zero bucket ends here, and it stays behind at bucketIndex.
 		t.table[bucketIndex] = zeroBucket
 		t.table = append(t.table, oneBucket)
@@ -57,15 +57,15 @@ func (t *routingTable) addEntry(entry dhtNode) {
 	t.addEntry(entry)
 }
 
-func (t *routingTable) findNode(targetId nodeId) (result []dhtNode, exactMatch bool) {
-	if t.thisDhtNode.nodeId.isEqual(targetId) {
-		return []dhtNode{t.thisDhtNode}, true
+func (t *routingTable) findNode(targetId nodeId) (result []nodeInfo, exactMatch bool) {
+	if t.thisNodeInfo.nodeId.isEqual(targetId) {
+		return []nodeInfo{t.thisNodeInfo}, true
 	}
 
 	var currentMaxPrefixLength = len(t.table) - 1
-	var prefixLength = commonPrefixLength(t.thisDhtNode.nodeId, targetId)
+	var prefixLength = commonPrefixLength(t.thisNodeInfo.nodeId, targetId)
 	var startBucketIndex = min(prefixLength, currentMaxPrefixLength)
-	result = make([]dhtNode, 0, t.bucketSize)
+	result = make([]nodeInfo, 0, t.bucketSize)
 
 	for offset := 0; (startBucketIndex-offset) > 0 || (startBucketIndex+offset) <= currentMaxPrefixLength; offset++ {
 		var i = startBucketIndex - offset

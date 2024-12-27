@@ -11,17 +11,17 @@ func TestBucketAddEntry(t *testing.T) {
 	var nodeId2 = hexStringToNodeId("9000000800900000080000000000000000000002")
 	var nodeId3 = hexStringToNodeId("9000000800900000080000000000000000000003")
 
-	bucket, success := bucket.addEntry(dhtNode{nodeId: nodeId1})
+	bucket, success := bucket.addEntry(nodeInfo{nodeId: nodeId1})
 	if !success {
 		t.Error("Expected addEntry to return true")
 	}
 
-	bucket, success = bucket.addEntry(dhtNode{nodeId: nodeId2})
+	bucket, success = bucket.addEntry(nodeInfo{nodeId: nodeId2})
 	if !success {
 		t.Error("Expected addEntry to return true")
 	}
 
-	bucket, success = bucket.addEntry(dhtNode{nodeId: nodeId3})
+	bucket, success = bucket.addEntry(nodeInfo{nodeId: nodeId3})
 	if success {
 		t.Error("Expected addEntry to return false")
 	}
@@ -43,8 +43,8 @@ func TestBucketGetEntryByIdOrReturnAll(t *testing.T) {
 	var nodeId2 = hexStringToNodeId("9000000800900000080000000000000000000002")
 	var nodeId3 = hexStringToNodeId("9000000800900000080000000000000000000003")
 
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId1})
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId2})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId1})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId2})
 
 	var result, exactMatch = bucket.getEntryByIdOrReturnAll(nodeId1)
 	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(nodeId1) {
@@ -70,11 +70,11 @@ func TestSplitAt(t *testing.T) {
 	var nodeId4 = hexStringToNodeId("0000000000000000000000000000000000000004")
 	var nodeId5 = hexStringToNodeId("f000000000000000000000000000000000000005")
 
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId1})
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId2})
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId3})
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId4})
-	bucket, _ = bucket.addEntry(dhtNode{nodeId: nodeId5})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId1})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId2})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId3})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId4})
+	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId5})
 
 	var zero, one = bucket.splitAt(0)
 	if len(zero.entries) != 3 {

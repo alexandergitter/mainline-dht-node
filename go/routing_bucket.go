@@ -7,17 +7,17 @@ import (
 
 type bucket struct {
 	bucketSize int
-	entries    []dhtNode
+	entries    []nodeInfo
 }
 
 func newBucket(bucketSize int) bucket {
 	return bucket{
 		bucketSize: bucketSize,
-		entries:    make([]dhtNode, 0, bucketSize),
+		entries:    make([]nodeInfo, 0, bucketSize),
 	}
 }
 
-func (b bucket) addEntry(entry dhtNode) (updated bucket, success bool) {
+func (b bucket) addEntry(entry nodeInfo) (updated bucket, success bool) {
 	if b.containsNodeId(entry.nodeId) {
 		return b, true
 	}
@@ -40,7 +40,7 @@ func (b bucket) containsNodeId(id nodeId) bool {
 	return false
 }
 
-func (b bucket) getEntryByIdOrReturnAll(id nodeId) (result []dhtNode, exactMatch bool) {
+func (b bucket) getEntryByIdOrReturnAll(id nodeId) (result []nodeInfo, exactMatch bool) {
 	for i, entry := range b.entries {
 		if entry.nodeId.isEqual(id) {
 			return b.entries[i : i+1], true

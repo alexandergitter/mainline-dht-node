@@ -10,17 +10,17 @@ func TestRoutingTableAddEntry(t *testing.T) {
 	var nearId1 = hexStringToNodeId("7000000000000000000000000000000000000000")
 	var nearId2 = hexStringToNodeId("0000000000ffffffffffffffffffffffffffffff")
 
-	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
-	table.addEntry(dhtNode{nodeId: distantId1})
+	var table = newRoutingTable(2, nodeInfo{nodeId: ownId})
+	table.addEntry(nodeInfo{nodeId: distantId1})
 	var sizeBeforeDuplicateAdded = len(table.table[0].entries)
-	table.addEntry(dhtNode{nodeId: distantId1})
+	table.addEntry(nodeInfo{nodeId: distantId1})
 
 	if len(table.table[0].entries) != sizeBeforeDuplicateAdded {
 		t.Error("Expected addEntry to not add duplicate entry")
 	}
 
-	table.addEntry(dhtNode{nodeId: distantId2})
-	table.addEntry(dhtNode{nodeId: distantId3})
+	table.addEntry(nodeInfo{nodeId: distantId2})
+	table.addEntry(nodeInfo{nodeId: distantId3})
 
 	// Tree should be split at this point, with the latest distant node discarded
 	if len(table.table) <= 1 {
@@ -46,8 +46,8 @@ func TestRoutingTableAddEntry(t *testing.T) {
 		t.Error("Expected bucket with shorter prefix to not contain distantId3")
 	}
 
-	table.addEntry(dhtNode{nodeId: nearId1})
-	table.addEntry(dhtNode{nodeId: nearId2})
+	table.addEntry(nodeInfo{nodeId: nearId1})
+	table.addEntry(nodeInfo{nodeId: nearId2})
 
 	if !table.table[1].containsNodeId(nearId1) {
 		t.Error("Expected bucket with longer prefix to contain nearId1")
@@ -64,11 +64,11 @@ func TestRoutingTableFindNode(t *testing.T) {
 	var nodeId3 = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
 	var nodeId4 = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
 
-	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
-	table.addEntry(dhtNode{nodeId: nodeId1})
-	table.addEntry(dhtNode{nodeId: nodeId2})
-	table.addEntry(dhtNode{nodeId: nodeId3})
-	table.addEntry(dhtNode{nodeId: nodeId4})
+	var table = newRoutingTable(2, nodeInfo{nodeId: ownId})
+	table.addEntry(nodeInfo{nodeId: nodeId1})
+	table.addEntry(nodeInfo{nodeId: nodeId2})
+	table.addEntry(nodeInfo{nodeId: nodeId3})
+	table.addEntry(nodeInfo{nodeId: nodeId4})
 
 	// At this point, the routing table looks something like this:
 	// 0: [nodeId1]
@@ -113,9 +113,9 @@ func TestRoutingTableFindOwnNode(t *testing.T) {
 	var ownId = hexStringToNodeId("1234000000000000000000000000000000000000")
 	var nodeId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
 	var nodeId2 = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
-	var table = newRoutingTable(2, dhtNode{nodeId: ownId})
-	table.addEntry(dhtNode{nodeId: nodeId1})
-	table.addEntry(dhtNode{nodeId: nodeId2})
+	var table = newRoutingTable(2, nodeInfo{nodeId: ownId})
+	table.addEntry(nodeInfo{nodeId: nodeId1})
+	table.addEntry(nodeInfo{nodeId: nodeId2})
 
 	var result, exactMatch = table.findNode(ownId)
 	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(ownId) {

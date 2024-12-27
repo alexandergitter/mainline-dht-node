@@ -91,7 +91,7 @@ func main() {
 		panic(err)
 	}
 
-	var myNodeInfo = dhtNode{
+	var myNodeInfo = nodeInfo{
 		nodeId:  ownId,
 		address: *listenOn,
 	}
