@@ -26,21 +26,6 @@ func getMyIp() (net.IP, error) {
 	return result, nil
 }
 
-func buildPing(transactionId string, ownNodeId nodeId) krpcQuery {
-	return krpcQuery{
-		transactionId: transactionId,
-		methodName:    "ping",
-		arguments:     bencodeDict{"id": bencodeString(ownNodeId[:])},
-	}
-}
-
-func buildResponse(transactionId string, res bencodeDict) krpcResponse {
-	return krpcResponse{
-		transactionId: transactionId,
-		response:      res,
-	}
-}
-
 type envelope struct {
 	address *net.UDPAddr
 	message krpcMessage
@@ -60,6 +45,7 @@ func receiver(conn *net.UDPConn, data chan envelope) {
 
 		fmt.Println("Received", n, "bytes", "from", udp)
 
+		// TODO: If this is invalid bencode, we should reply with an error response. For now just log and continue
 		dict, err := decodeBencodeDict(string(buffer[:n]))
 		if err != nil {
 			fmt.Println(err)
@@ -99,13 +85,19 @@ func main() {
 		log.Fatalf("error while generating node id: %s", err)
 	}
 
-	var table = newRoutingTable(ENTRIES, dhtNode{nodeId: ownId})
-	printRoutingTable(table)
-
 	listenOn, err := net.ResolveUDPAddr("udp", "127.0.0.1:6880")
 	conn, err := net.ListenUDP("udp", listenOn)
 	if err != nil {
 		panic(err)
+	}
+
+	var myNodeInfo = dhtNode{
+		nodeId:  ownId,
+		address: *listenOn,
+	}
+	var client = dhtClient{
+		thisNodeInfo: myNodeInfo,
+		routingTable: newRoutingTable(ENTRIES, myNodeInfo),
 	}
 
 	senderChannel := make(chan envelope)
@@ -115,14 +107,16 @@ func main() {
 	go sender(conn, senderChannel)
 
 	for {
-		senderChannel <- envelope{
-			address: listenOn,
-			message: buildPing("123", ownId),
-		}
-
 		select {
 		case env := <-receiverChannel:
 			fmt.Println(env)
+			var response = client.handleMessage(env.message)
+			if response != nil {
+				senderChannel <- envelope{
+					address: listenOn,
+					message: response,
+				}
+			}
 		default:
 			fmt.Scanln()
 		}
