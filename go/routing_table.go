@@ -62,6 +62,10 @@ func (t *routingTable) findNode(targetId nodeId) (result []nodeInfo, exactMatch 
 		return []nodeInfo{t.thisNodeInfo}, true
 	}
 
+	return t.findNodeWithoutSelf(targetId)
+}
+
+func (t *routingTable) findNodeWithoutSelf(targetId nodeId) (result []nodeInfo, exactMatch bool) {
 	var currentMaxPrefixLength = len(t.table) - 1
 	var prefixLength = commonPrefixLength(t.thisNodeInfo.nodeId, targetId)
 	var startBucketIndex = min(prefixLength, currentMaxPrefixLength)

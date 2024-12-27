@@ -119,6 +119,11 @@ func TestRoutingTableFindOwnNode(t *testing.T) {
 
 	var result, exactMatch = table.findNode(ownId)
 	if !exactMatch || len(result) != 1 || !result[0].nodeId.isEqual(ownId) {
-		t.Error("Expected exact match with node entry")
+		t.Error("Expected exact match with node entry, go:", result)
+	}
+
+	result, exactMatch = table.findNodeWithoutSelf(ownId)
+	if exactMatch || len(result) != 2 || result[0].nodeId.isEqual(ownId) || result[1].nodeId.isEqual(ownId) {
+		t.Error("Expected findNodeWithoutSelf to not match ownId, got: ", result)
 	}
 }
