@@ -7,17 +7,19 @@ type dhtClient struct {
 	routingTable routingTable
 }
 
-func (c *dhtClient) handleMessage(message krpcMessage) krpcMessage {
+func newDhtClient(thisNodeInfo nodeInfo, routingTable routingTable) dhtClient {
+	return dhtClient{
+		thisNodeInfo: thisNodeInfo,
+		routingTable: routingTable,
+	}
+}
+
+func (c *dhtClient) handleQuery(message krpcQuery) krpcMessage {
 	fmt.Println(message)
 
-	switch message.(type) {
-	case krpcQuery:
-		return krpcError{
-			transactionId: message.(krpcQuery).transactionId,
-			code:          KrpcErrorUnknownMethod,
-			message:       "Unsupported method",
-		}
+	return krpcError{
+		transactionId: message.transactionId,
+		code:          KrpcErrorUnknownMethod,
+		message:       "Unsupported method",
 	}
-
-	return nil
 }
