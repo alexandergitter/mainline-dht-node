@@ -4,10 +4,10 @@ import "fmt"
 
 type dhtClient struct {
 	thisNodeInfo nodeInfo
-	routingTable routingTable
+	routingTable *routingTable
 }
 
-func newDhtClient(thisNodeInfo nodeInfo, routingTable routingTable) dhtClient {
+func newDhtClient(thisNodeInfo nodeInfo, routingTable *routingTable) dhtClient {
 	return dhtClient{
 		thisNodeInfo: thisNodeInfo,
 		routingTable: routingTable,

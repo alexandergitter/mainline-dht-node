@@ -1,27 +1,39 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 type routingTable struct {
 	thisNodeInfo nodeInfo
 	bucketSize   int
 	table        []bucket
+	lock         sync.RWMutex
 }
 
-func newRoutingTable(bucketSize int, thisNodeInfo nodeInfo) routingTable {
+func newRoutingTable(bucketSize int, thisNodeInfo nodeInfo) *routingTable {
 	// Technically we don't need all 160 buckets, since there are only 8 nodes with common
 	// longest prefix length of 157, so bucket 157 will never be split.
 	var initialTable = make([]bucket, 0, 160)
 	initialTable = append(initialTable, newBucket(bucketSize))
 
-	return routingTable{
+	return &routingTable{
 		thisNodeInfo: thisNodeInfo,
 		bucketSize:   bucketSize,
 		table:        initialTable,
+		lock:         sync.RWMutex{},
 	}
 }
 
 func (t *routingTable) addEntry(entry nodeInfo) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.addEntryRec(entry)
+}
+
+func (t *routingTable) addEntryRec(entry nodeInfo) {
 	var currentMaxPrefixLength = len(t.table) - 1
 	var prefixLength = commonPrefixLength(t.thisNodeInfo.nodeId, entry.nodeId)
 	var bucketIndex = min(prefixLength, currentMaxPrefixLength)
@@ -54,7 +66,7 @@ func (t *routingTable) addEntry(entry nodeInfo) {
 	}
 
 	// Now that we set up the new buckets, we can try to add the entry again.
-	t.addEntry(entry)
+	t.addEntryRec(entry)
 }
 
 func (t *routingTable) findNode(targetId nodeId) (result []nodeInfo, exactMatch bool) {
@@ -66,6 +78,9 @@ func (t *routingTable) findNode(targetId nodeId) (result []nodeInfo, exactMatch 
 }
 
 func (t *routingTable) findNodeWithoutSelf(targetId nodeId) (result []nodeInfo, exactMatch bool) {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
 	var currentMaxPrefixLength = len(t.table) - 1
 	var prefixLength = commonPrefixLength(t.thisNodeInfo.nodeId, targetId)
 	var startBucketIndex = min(prefixLength, currentMaxPrefixLength)
@@ -106,7 +121,10 @@ func (t *routingTable) findNodeWithoutSelf(targetId nodeId) (result []nodeInfo, 
 	return result, false
 }
 
-func printRoutingTable(table routingTable) {
+func printRoutingTable(table *routingTable) {
+	table.lock.RLock()
+	defer table.lock.RUnlock()
+
 	for i, bucket := range table.table {
 		fmt.Printf("%3d: %s", i, bucket)
 		fmt.Println()
