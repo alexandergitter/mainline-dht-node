@@ -26,6 +26,7 @@ func newKrpcNode(listenOn *net.UDPAddr) *krpcNode {
 func (k *krpcNode) enqueuePendingRequest(id string) <-chan krpcMessage {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
+
 	var ch = make(chan krpcMessage, 1)
 	k.pendingRequests[id] = ch
 	return ch
@@ -34,12 +35,14 @@ func (k *krpcNode) enqueuePendingRequest(id string) <-chan krpcMessage {
 func (k *krpcNode) cancelPendingRequest(id string) {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
+
 	delete(k.pendingRequests, id)
 }
 
 func (k *krpcNode) dequeuePendingRequest(id string) (chan<- krpcMessage, bool) {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
+
 	ch, ok := k.pendingRequests[id]
 	delete(k.pendingRequests, id)
 	return ch, ok
