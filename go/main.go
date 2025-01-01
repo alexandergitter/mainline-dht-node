@@ -43,7 +43,7 @@ func main() {
 		address: *listenOn,
 	}
 	var client = newDhtClient(myNodeInfo, newRoutingTable(ENTRIES, myNodeInfo))
-	newKrpcNode(listenOn).start(client)
+	newKrpcRuntime(listenOn).start(client)
 
 	for {
 		select {

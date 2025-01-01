@@ -8,22 +8,22 @@ import (
 	"time"
 )
 
-type krpcNode struct {
+type krpcRuntime struct {
 	pendingRequests     map[string]chan<- krpcMessage
 	pendingRequestsLock sync.Mutex
 	addr                *net.UDPAddr
 	conn                *net.UDPConn
 }
 
-func newKrpcNode(listenOn *net.UDPAddr) *krpcNode {
-	return &krpcNode{
+func newKrpcRuntime(listenOn *net.UDPAddr) *krpcRuntime {
+	return &krpcRuntime{
 		pendingRequests:     make(map[string]chan<- krpcMessage),
 		pendingRequestsLock: sync.Mutex{},
 		addr:                listenOn,
 	}
 }
 
-func (k *krpcNode) enqueuePendingRequest(id string) <-chan krpcMessage {
+func (k *krpcRuntime) enqueuePendingRequest(id string) <-chan krpcMessage {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
 
@@ -32,14 +32,14 @@ func (k *krpcNode) enqueuePendingRequest(id string) <-chan krpcMessage {
 	return ch
 }
 
-func (k *krpcNode) cancelPendingRequest(id string) {
+func (k *krpcRuntime) cancelPendingRequest(id string) {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
 
 	delete(k.pendingRequests, id)
 }
 
-func (k *krpcNode) dequeuePendingRequest(id string) (chan<- krpcMessage, bool) {
+func (k *krpcRuntime) dequeuePendingRequest(id string) (chan<- krpcMessage, bool) {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
 
@@ -48,7 +48,7 @@ func (k *krpcNode) dequeuePendingRequest(id string) (chan<- krpcMessage, bool) {
 	return ch, ok
 }
 
-func (k *krpcNode) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
+func (k *krpcRuntime) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
 	var responseChannel = k.enqueuePendingRequest(msg.transactionId)
 	_, err := k.conn.WriteToUDP([]byte(msg.encode()), dest)
 	if err != nil {
@@ -63,7 +63,7 @@ func (k *krpcNode) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, err
 	}
 }
 
-func (k *krpcNode) receiveMessages(handler dhtClient) {
+func (k *krpcRuntime) receiveMessages(handler dhtClient) {
 	buffer := make([]byte, 65535)
 
 	for {
@@ -116,7 +116,7 @@ func (k *krpcNode) receiveMessages(handler dhtClient) {
 	}
 }
 
-func (k *krpcNode) start(handler dhtClient) {
+func (k *krpcRuntime) start(handler dhtClient) {
 	conn, err := net.ListenUDP("udp", k.addr)
 	if err != nil {
 		panic(err)
