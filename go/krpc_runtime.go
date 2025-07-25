@@ -79,7 +79,7 @@ func (k *krpcRuntime) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, 
 	}
 }
 
-func (k *krpcRuntime) receiveMessages(handler dhtClient) {
+func (k *krpcRuntime) receiveMessages(handler *dhtClient) {
 	buffer := make([]byte, 65535)
 
 	for {
@@ -128,7 +128,7 @@ func (k *krpcRuntime) receiveMessages(handler dhtClient) {
 	}
 }
 
-func (k *krpcRuntime) start(handler dhtClient) {
+func (k *krpcRuntime) start(handler *dhtClient) {
 	conn, err := net.ListenUDP("udp", k.addr)
 	if err != nil {
 		panic(err)

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 )
 
 const ENTRIES = 8
@@ -33,7 +34,7 @@ func main() {
 		log.Fatalf("error while generating node id: %s", err)
 	}
 
-	listenOn, err := net.ResolveUDPAddr("udp", "127.0.0.1:6880")
+	listenOn, err := net.ResolveUDPAddr("udp", os.Args[1])
 	if err != nil {
 		panic(err)
 	}
@@ -42,13 +43,23 @@ func main() {
 		nodeId:  ownId,
 		address: *listenOn,
 	}
-	var client = newDhtClient(myNodeInfo, newRoutingTable(ENTRIES, myNodeInfo))
-	newKrpcRuntime(listenOn).start(client)
+	var client = startDhtClient(myNodeInfo, newRoutingTable(ENTRIES, myNodeInfo), listenOn)
 
+	var input string
 	for {
-		select {
+		fmt.Scanln(&input)
+		switch input {
+		case "quit":
+			fmt.Println("Exiting...")
+			return
 		default:
-			fmt.Scanln()
+			var addr, _ = net.ResolveUDPAddr("udp", input)
+			var dest = nodeInfo{
+				nodeId:  ownId,
+				address: *addr,
+			}
+			var res, _ = client.ping(dest)
+			fmt.Println(res)
 		}
 	}
 }

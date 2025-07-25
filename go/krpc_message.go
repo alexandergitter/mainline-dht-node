@@ -26,7 +26,7 @@ type krpcQuery struct {
 }
 type krpcResponse struct {
 	transactionId string
-	response      bencodeDict
+	returnValues  bencodeDict
 }
 
 type krpcError struct {
@@ -64,7 +64,7 @@ func (res *krpcResponse) encode() string {
 	var ben = bencodeDict{
 		"t": bencodeString(res.transactionId),
 		"y": bencodeString(KrpcTypeReply),
-		"r": res.response,
+		"r": res.returnValues,
 	}
 
 	return ben.encode()
@@ -127,7 +127,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 
 		return &krpcResponse{
 			transactionId: string(t),
-			response:      r,
+			returnValues:  r,
 		}, nil
 	case KrpcTypeError:
 		var e, eValid = data["e"].(bencodeList)
