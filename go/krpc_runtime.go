@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -23,13 +24,26 @@ func newKrpcRuntime(listenOn *net.UDPAddr) *krpcRuntime {
 	}
 }
 
-func (k *krpcRuntime) enqueuePendingRequest(id string) <-chan krpcMessage {
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func (k *krpcRuntime) generateTransactionId() string {
+	// TODO: This should check for uniqueness in the pending requests map and can probably use
+	//       arbitrary bytes instead of ascii characters
+	b := make([]byte, 2)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
+
+func (k *krpcRuntime) enqueuePendingRequest() (<-chan krpcMessage, string) {
 	k.pendingRequestsLock.Lock()
 	defer k.pendingRequestsLock.Unlock()
 
 	var ch = make(chan krpcMessage, 1)
-	k.pendingRequests[id] = ch
-	return ch
+	var transactionId = k.generateTransactionId()
+	k.pendingRequests[transactionId] = ch
+	return ch, transactionId
 }
 
 func (k *krpcRuntime) cancelPendingRequest(id string) {
@@ -49,7 +63,9 @@ func (k *krpcRuntime) dequeuePendingRequest(id string) (chan<- krpcMessage, bool
 }
 
 func (k *krpcRuntime) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
-	var responseChannel = k.enqueuePendingRequest(msg.transactionId)
+	var responseChannel, transactionId = k.enqueuePendingRequest()
+	msg.transactionId = transactionId
+
 	_, err := k.conn.WriteToUDP([]byte(msg.encode()), dest)
 	if err != nil {
 		return nil, err
@@ -92,26 +108,22 @@ func (k *krpcRuntime) receiveMessages(handler dhtClient) {
 		}
 
 		switch msg.(type) {
-		case krpcResponse:
-			var id = msg.(krpcResponse).transactionId
-			if ch, ok := k.dequeuePendingRequest(id); ok {
-				ch <- msg
-			}
-		case krpcError:
-			var id = msg.(krpcError).transactionId
-			if ch, ok := k.dequeuePendingRequest(id); ok {
-				ch <- msg
-			}
-		case krpcQuery:
+		case *krpcQuery:
 			go func() {
-				var response = handler.handleQuery(msg.(krpcQuery))
+				var response = handler.handleQuery(msg.(*krpcQuery))
 				if response != nil {
+					response.setTransactionId(msg.getTransactionId())
 					_, err := k.conn.WriteToUDP([]byte(response.encode()), srcAddr)
 					if err != nil {
 						fmt.Println(err)
 					}
 				}
 			}()
+		default:
+			var id = msg.getTransactionId()
+			if ch, ok := k.dequeuePendingRequest(id); ok {
+				ch <- msg
+			}
 		}
 	}
 }

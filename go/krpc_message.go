@@ -37,9 +37,11 @@ type krpcError struct {
 
 type krpcMessage interface {
 	encode() string
+	getTransactionId() string
+	setTransactionId(string)
 }
 
-func (qry krpcQuery) encode() string {
+func (qry *krpcQuery) encode() string {
 	var ben = bencodeDict{
 		"t": bencodeString(qry.transactionId),
 		"y": bencodeString(KrpcTypeQuery),
@@ -50,7 +52,15 @@ func (qry krpcQuery) encode() string {
 	return ben.encode()
 }
 
-func (res krpcResponse) encode() string {
+func (qry *krpcQuery) getTransactionId() string {
+	return qry.transactionId
+}
+
+func (qry *krpcQuery) setTransactionId(id string) {
+	qry.transactionId = id
+}
+
+func (res *krpcResponse) encode() string {
 	var ben = bencodeDict{
 		"t": bencodeString(res.transactionId),
 		"y": bencodeString(KrpcTypeReply),
@@ -60,7 +70,15 @@ func (res krpcResponse) encode() string {
 	return ben.encode()
 }
 
-func (err krpcError) encode() string {
+func (res *krpcResponse) getTransactionId() string {
+	return res.transactionId
+}
+
+func (res *krpcResponse) setTransactionId(id string) {
+	res.transactionId = id
+}
+
+func (err *krpcError) encode() string {
 	var ben = bencodeDict{
 		"t": bencodeString(err.transactionId),
 		"y": bencodeString(KrpcTypeError),
@@ -68,6 +86,14 @@ func (err krpcError) encode() string {
 	}
 
 	return ben.encode()
+}
+
+func (err *krpcError) getTransactionId() string {
+	return err.transactionId
+}
+
+func (err *krpcError) setTransactionId(id string) {
+	err.transactionId = id
 }
 
 func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
@@ -87,7 +113,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 			return nil, fmt.Errorf("Query method or arguments are missing or invalid")
 		}
 
-		return krpcQuery{
+		return &krpcQuery{
 			transactionId: string(t),
 			methodName:    string(q),
 			arguments:     a,
@@ -99,7 +125,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 			return nil, fmt.Errorf("Response is not a dictionary")
 		}
 
-		return krpcResponse{
+		return &krpcResponse{
 			transactionId: string(t),
 			response:      r,
 		}, nil
@@ -117,7 +143,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 			return nil, fmt.Errorf("Error code or message are missing or invalid")
 		}
 
-		return krpcError{
+		return &krpcError{
 			transactionId: string(t),
 			code:          int(code),
 			message:       string(message),

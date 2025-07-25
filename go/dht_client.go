@@ -14,12 +14,11 @@ func newDhtClient(thisNodeInfo nodeInfo, routingTable *routingTable) dhtClient {
 	}
 }
 
-func (c *dhtClient) handleQuery(message krpcQuery) krpcMessage {
+func (c *dhtClient) handleQuery(message *krpcQuery) krpcMessage {
 	fmt.Println(message)
 
-	return krpcError{
-		transactionId: message.transactionId,
-		code:          KrpcErrorUnknownMethod,
-		message:       "Unsupported method",
+	return &krpcError{
+		code:    KrpcErrorUnknownMethod,
+		message: "Unsupported method",
 	}
 }
