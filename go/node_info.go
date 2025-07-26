@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/bits"
 	"net"
@@ -54,9 +55,9 @@ func (n nodeInfo) String() string {
 	return fmt.Sprintf("nodeInfo{%s}", n.nodeId)
 }
 
-func decodeCompactNodeInfo(data string) nodeInfo {
+func decodeCompactNodeInfo(data string) (nodeInfo, error) {
 	if len(data) != 26 {
-		panic("Invalid compact node info length")
+		return nodeInfo{}, errors.New("Invalid compact node info length - expected 26 bytes")
 	}
 
 	return nodeInfo{
@@ -65,7 +66,7 @@ func decodeCompactNodeInfo(data string) nodeInfo {
 			IP:   net.IPv4(data[20], data[21], data[22], data[23]),
 			Port: int(binary.BigEndian.Uint16([]byte(data[24:]))),
 		},
-	}
+	}, nil
 }
 
 // Helpers
@@ -78,26 +79,32 @@ func bytesToHexString(b []byte) string {
 	return builder.String()
 }
 
-func hexStringToBytes(s string) []byte {
+func hexStringToBytes(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
-		panic("Invalid hex string length")
+		return nil, errors.New("Hex string must have an even length")
 	}
 
 	result := make([]byte, len(s)/2)
 	for i := 0; i < len(s)/2; i++ {
 		if b, err := strconv.ParseUint(s[2*i:2*i+2], 16, 8); err != nil {
-			panic(err)
+			return nil, err
 		} else {
 			result[i] = byte(b)
 		}
 	}
-	return result
+
+	return result, nil
 }
 
-func hexStringToNodeId(s string) nodeId {
+func hexStringToNodeId(s string) (nodeId, error) {
 	if len(s) != 40 {
-		panic("Invalid hex string length")
+		return nodeId(make([]byte, 20)), errors.New("Invalid hex string length")
 	}
 
-	return nodeId(hexStringToBytes(s))
+	var idBytes, err = hexStringToBytes(s)
+	if err != nil {
+		return nodeId(make([]byte, 20)), err
+	}
+
+	return nodeId(idBytes), nil
 }

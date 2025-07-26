@@ -7,9 +7,9 @@ import (
 func TestBucketAddEntry(t *testing.T) {
 	var bucket = newBucket(2)
 
-	var nodeId1 = hexStringToNodeId("9000000800900000080000000000000000000001")
-	var nodeId2 = hexStringToNodeId("9000000800900000080000000000000000000002")
-	var nodeId3 = hexStringToNodeId("9000000800900000080000000000000000000003")
+	var nodeId1, _ = hexStringToNodeId("9000000800900000080000000000000000000001")
+	var nodeId2, _ = hexStringToNodeId("9000000800900000080000000000000000000002")
+	var nodeId3, _ = hexStringToNodeId("9000000800900000080000000000000000000003")
 
 	bucket, success := bucket.addEntry(nodeInfo{nodeId: nodeId1})
 	if !success {
@@ -39,9 +39,9 @@ func TestBucketAddEntry(t *testing.T) {
 func TestBucketGetEntryByIdOrReturnAll(t *testing.T) {
 	var bucket = newBucket(8)
 
-	var nodeId1 = hexStringToNodeId("9000000800900000080000000000000000000001")
-	var nodeId2 = hexStringToNodeId("9000000800900000080000000000000000000002")
-	var nodeId3 = hexStringToNodeId("9000000800900000080000000000000000000003")
+	var nodeId1, _ = hexStringToNodeId("9000000800900000080000000000000000000001")
+	var nodeId2, _ = hexStringToNodeId("9000000800900000080000000000000000000002")
+	var nodeId3, _ = hexStringToNodeId("9000000800900000080000000000000000000003")
 
 	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId1})
 	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId2})
@@ -64,11 +64,11 @@ func TestBucketGetEntryByIdOrReturnAll(t *testing.T) {
 
 func TestSplitAt(t *testing.T) {
 	var bucket = newBucket(8)
-	var nodeId1 = hexStringToNodeId("0000000000000000000000000000000000000001")
-	var nodeId2 = hexStringToNodeId("f000000000000000000000000000000000000002")
-	var nodeId3 = hexStringToNodeId("0000000000000000000000000000000000000003")
-	var nodeId4 = hexStringToNodeId("0000000000000000000000000000000000000004")
-	var nodeId5 = hexStringToNodeId("f000000000000000000000000000000000000005")
+	var nodeId1, _ = hexStringToNodeId("0000000000000000000000000000000000000001")
+	var nodeId2, _ = hexStringToNodeId("f000000000000000000000000000000000000002")
+	var nodeId3, _ = hexStringToNodeId("0000000000000000000000000000000000000003")
+	var nodeId4, _ = hexStringToNodeId("0000000000000000000000000000000000000004")
+	var nodeId5, _ = hexStringToNodeId("f000000000000000000000000000000000000005")
 
 	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId1})
 	bucket, _ = bucket.addEntry(nodeInfo{nodeId: nodeId2})

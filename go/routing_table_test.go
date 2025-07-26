@@ -3,12 +3,12 @@ package main
 import "testing"
 
 func TestRoutingTableAddEntry(t *testing.T) {
-	var ownId = hexStringToNodeId("0000000000000000000000000000000000000000")
-	var distantId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var distantId2 = hexStringToNodeId("8000000000000000000000000000000000000000")
-	var distantId3 = hexStringToNodeId("ffffffffffffff00000000000000000000000000")
-	var nearId1 = hexStringToNodeId("7000000000000000000000000000000000000000")
-	var nearId2 = hexStringToNodeId("0000000000ffffffffffffffffffffffffffffff")
+	var ownId, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var distantId1, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var distantId2, _ = hexStringToNodeId("8000000000000000000000000000000000000000")
+	var distantId3, _ = hexStringToNodeId("ffffffffffffff00000000000000000000000000")
+	var nearId1, _ = hexStringToNodeId("7000000000000000000000000000000000000000")
+	var nearId2, _ = hexStringToNodeId("0000000000ffffffffffffffffffffffffffffff")
 
 	var table = newRoutingTable(2, nodeInfo{nodeId: ownId})
 	table.addEntry(nodeInfo{nodeId: distantId1})
@@ -58,11 +58,11 @@ func TestRoutingTableAddEntry(t *testing.T) {
 }
 
 func TestRoutingTableFindNode(t *testing.T) {
-	var ownId = hexStringToNodeId("0000000000000000000000000000000000000000")
-	var nodeId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var nodeId2 = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
-	var nodeId3 = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
-	var nodeId4 = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
+	var ownId, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var nodeId1, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var nodeId2, _ = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
+	var nodeId3, _ = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
+	var nodeId4, _ = hexStringToNodeId("000fffffffffffffffffffffffffffffffffffff")
 
 	var table = newRoutingTable(2, nodeInfo{nodeId: ownId})
 	table.addEntry(nodeInfo{nodeId: nodeId1})
@@ -88,31 +88,35 @@ func TestRoutingTableFindNode(t *testing.T) {
 		t.Error("Expected exact match")
 	}
 
-	result, exactMatch = table.findNode(hexStringToNodeId("faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 0
+	var query, _ = hexStringToNodeId("faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	result, exactMatch = table.findNode(query) // bucket 0
 	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId1) || !result[1].nodeId.isEqual(nodeId2) {
 		t.Error("Expected one entry from bucket 0 and one from bucket 4, got: ", result)
 	}
 
-	result, exactMatch = table.findNode(hexStringToNodeId("3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 2
+	query, _ = hexStringToNodeId("3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	result, exactMatch = table.findNode(query) // bucket 2
 	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId1) || !result[1].nodeId.isEqual(nodeId2) {
 		t.Error("Expected one entry from bucket 0 and one from bucket 4, got: ", result)
 	}
 
-	result, exactMatch = table.findNode(hexStringToNodeId("1faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 3
+	query, _ = hexStringToNodeId("1faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	result, exactMatch = table.findNode(query) // bucket 3
 	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId2) || !result[1].nodeId.isEqual(nodeId3) {
 		t.Error("Expected one entry from bucket 4 and one from bucket 5, got: ", result)
 	}
 
-	result, exactMatch = table.findNode(hexStringToNodeId("000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) // bucket 5
+	query, _ = hexStringToNodeId("000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	result, exactMatch = table.findNode(query) // bucket 5
 	if exactMatch || len(result) != 2 || !result[0].nodeId.isEqual(nodeId3) || !result[1].nodeId.isEqual(nodeId4) {
 		t.Error("Expected all from bucket 5, got: ", result)
 	}
 }
 
 func TestRoutingTableFindOwnNode(t *testing.T) {
-	var ownId = hexStringToNodeId("1234000000000000000000000000000000000000")
-	var nodeId1 = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var nodeId2 = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
+	var ownId, _ = hexStringToNodeId("1234000000000000000000000000000000000000")
+	var nodeId1, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var nodeId2, _ = hexStringToNodeId("0fffffffffffffffffffffffffffffffffffffff")
 	var table = newRoutingTable(2, nodeInfo{nodeId: ownId})
 	table.addEntry(nodeInfo{nodeId: nodeId1})
 	table.addEntry(nodeInfo{nodeId: nodeId2})

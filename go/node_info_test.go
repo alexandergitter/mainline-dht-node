@@ -6,7 +6,7 @@ import (
 )
 
 func TestNodeIdBitSet(t *testing.T) {
-	var id = hexStringToNodeId("9000000080000000000000000000000000000001")
+	var id, _ = hexStringToNodeId("9000000080000000000000000000000000000001")
 	if id.isBitSet(0) != true {
 		t.Error("Expected bitSet(0) to return true")
 	}
@@ -28,11 +28,11 @@ func TestNodeIdBitSet(t *testing.T) {
 }
 
 func TestLongestCommonPrefixLength(t *testing.T) {
-	var a = hexStringToNodeId("0000000000000000000000000000000000000000")
-	var b = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
-	var c = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
-	var d = hexStringToNodeId("002fffffffffffffffffffffffffffffffffffff")
-	var e = hexStringToNodeId("007fffffffffffffffffffffffffffffffffffff")
+	var a, _ = hexStringToNodeId("0000000000000000000000000000000000000000")
+	var b, _ = hexStringToNodeId("ffffffffffffffffffffffffffffffffffffffff")
+	var c, _ = hexStringToNodeId("00ffffffffffffffffffffffffffffffffffffff")
+	var d, _ = hexStringToNodeId("002fffffffffffffffffffffffffffffffffffff")
+	var e, _ = hexStringToNodeId("007fffffffffffffffffffffffffffffffffffff")
 
 	if commonPrefixLength(a, a) != 160 {
 		t.Error("Expected 160")
@@ -52,7 +52,7 @@ func TestLongestCommonPrefixLength(t *testing.T) {
 }
 
 func TestCompactNodeInfo(t *testing.T) {
-	var id = hexStringToNodeId("000100020003000400050006000700080009000a")
+	var id, _ = hexStringToNodeId("000100020003000400050006000700080009000a")
 	var node = nodeInfo{
 		nodeId: id,
 		address: net.UDPAddr{
@@ -61,12 +61,12 @@ func TestCompactNodeInfo(t *testing.T) {
 		},
 	}
 
-	var compactBytes = hexStringToBytes("000100020003000400050006000700080009000a0c22384e9876")
+	var compactBytes, _ = hexStringToBytes("000100020003000400050006000700080009000a0c22384e9876")
 	if node.compactNodeInfo() != string(compactBytes) {
 		t.Error("Expected", bytesToHexString(compactBytes), "but got", bytesToHexString([]byte(node.compactNodeInfo())))
 	}
 
-	var decoded = decodeCompactNodeInfo(string(compactBytes))
+	var decoded, _ = decodeCompactNodeInfo(string(compactBytes))
 	if !decoded.nodeId.isEqual(id) || decoded.address.IP.String() != "12.34.56.78" || decoded.address.Port != 0x9876 {
 		t.Error("Got wrong decoded node info")
 	}
