@@ -28,16 +28,27 @@ func getMyIp() (net.IP, error) {
 }
 
 func main() {
-	var ownId = nodeId{}
-	_, err := rand.Read(ownId[:])
-	if err != nil {
-		log.Fatalf("error while generating node id: %s", err)
+	var ownId nodeId
+
+	if len(os.Args) < 3 {
+		_, err := rand.Read(ownId[:])
+		if err != nil {
+			log.Fatalf("error while generating node id: %s", err)
+		}
+	} else {
+		var err error
+		ownId, err = hexStringToNodeId(os.Args[2])
+		if err != nil {
+			log.Fatalf("error parsing node id: %s", err)
+		}
 	}
 
 	listenOn, err := net.ResolveUDPAddr("udp", os.Args[1])
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println("Listening on", listenOn, "with node id", ownId)
 
 	var myNodeInfo = nodeInfo{
 		nodeId:  ownId,
