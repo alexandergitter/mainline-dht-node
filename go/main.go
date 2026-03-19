@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 )
 
 const ENTRIES = 8
@@ -17,14 +19,21 @@ func getMyIp() (net.IP, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
 	ipStr, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
-
+	// TODO: check and handle for unsuccessful HTTP status codes
 	var result = net.ParseIP(string(ipStr))
 	return result, nil
+}
+
+func printUsage() {
+	fmt.Println("available commands:")
+	fmt.Println("  ping <ip:port>")
+	fmt.Println("  quit")
 }
 
 func main() {
@@ -56,21 +65,52 @@ func main() {
 	}
 	var client = startDhtClient(myNodeInfo, newRoutingTable(ENTRIES, myNodeInfo), listenOn)
 
-	var input string
+	reader := bufio.NewReader(os.Stdin)
+
 	for {
-		fmt.Scanln(&input)
-		switch input {
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				return
+			}
+			fmt.Println("read error:", err)
+			continue
+		}
+
+		parts := strings.Fields(input)
+		if len(parts) == 0 {
+			printUsage()
+			continue
+		}
+
+		command := parts[0]
+		args := parts[1:]
+
+		switch command {
 		case "quit":
 			fmt.Println("Exiting...")
 			return
-		default:
-			var addr, _ = net.ResolveUDPAddr("udp", input)
+
+		case "ping":
+			if len(args) != 1 {
+				printUsage()
+				continue
+			}
+
+			addr, err := net.ResolveUDPAddr("udp", args[0])
+			if err != nil {
+				fmt.Println("invalid address:", err)
+				continue
+			}
+
 			var dest = nodeInfo{
 				nodeId:  ownId,
 				address: *addr,
 			}
-			var res, _ = client.ping(dest)
-			fmt.Println(res)
+			client.ping(dest)
+
+		default:
+			printUsage()
 		}
 	}
 }
