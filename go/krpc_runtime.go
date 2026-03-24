@@ -62,11 +62,11 @@ func (k *krpcRuntime) dequeuePendingRequest(id string) (chan<- krpcMessage, bool
 	return ch, ok
 }
 
-func (k *krpcRuntime) rpcCall(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
+func (k *krpcRuntime) rpcCall(dest net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
 	var responseChannel, transactionId = k.enqueuePendingRequest()
 	msg.transactionId = transactionId
 
-	_, err := k.conn.WriteToUDP([]byte(msg.encode()), dest)
+	_, err := k.conn.WriteToUDP([]byte(msg.encode()), &dest)
 	if err != nil {
 		return nil, err
 	}

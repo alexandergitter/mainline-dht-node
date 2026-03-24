@@ -66,11 +66,30 @@ func (c *dhtClient) handleQuery(message *krpcQuery) krpcMessage {
 	return handler(c, message.arguments)
 }
 
-func (c *dhtClient) ping(dest nodeInfo) (krpcMessage, error) {
+func (c *dhtClient) ping(dest net.UDPAddr) (krpcMessage, error) {
 	var msg = krpcQuery{
 		methodName: "ping",
 		arguments:  bencodeDict{"id": bencodeString(c.thisNodeInfo.nodeId[:])},
 	}
 
-	return c.krpcRuntime.rpcCall(&dest.address, msg)
+	response, err := c.krpcRuntime.rpcCall(dest, msg)
+
+	if err == nil {
+		switch reply := response.(type) {
+		case *krpcResponse:
+			id, ok := reply.returnValues["id"]
+			if !ok {
+				return nil, fmt.Errorf("missing 'id' field in response")
+			}
+
+			peerNodeId, ok := id.(bencodeString)
+			if !ok || len(peerNodeId) != 20 {
+				return nil, fmt.Errorf("invalid 'id' field in response")
+			}
+
+			c.routingTable.addEntry(nodeInfo{nodeId: nodeId([]byte(peerNodeId)), address: dest})
+		}
+	}
+
+	return response, err
 }

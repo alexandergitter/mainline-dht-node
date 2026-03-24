@@ -103,11 +103,7 @@ func main() {
 				continue
 			}
 
-			var dest = nodeInfo{
-				nodeId:  ownId,
-				address: *addr,
-			}
-			client.ping(dest)
+			client.ping(*addr)
 
 		default:
 			printUsage()
