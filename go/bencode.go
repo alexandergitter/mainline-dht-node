@@ -214,7 +214,7 @@ func decodeList(scanner *scanner) (bencodeList, error) {
 		} else {
 			var value, err = decodeScannerBencodeValue(scanner)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("decoding bencode list: %w", err)
 			}
 
 			result = append(result, value)
@@ -235,12 +235,12 @@ func decodeDict(scanner *scanner) (bencodeDict, error) {
 		} else {
 			var key, err = decodeString(scanner)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("decoding bencode dict key: %w", err)
 			}
 
 			value, err := decodeScannerBencodeValue(scanner)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("decoding bencode dict value: %w", err)
 			}
 
 			result[string(key)] = value

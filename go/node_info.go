@@ -57,7 +57,7 @@ func (n nodeInfo) String() string {
 
 func decodeCompactNodeInfo(data string) (nodeInfo, error) {
 	if len(data) != 26 {
-		return nodeInfo{}, errors.New("Invalid compact node info length - expected 26 bytes")
+		return nodeInfo{}, fmt.Errorf("decoding compact node info: expected 26 bytes, got %d", len(data))
 	}
 
 	return nodeInfo{
@@ -81,7 +81,7 @@ func bytesToHexString(b []byte) string {
 
 func hexStringToBytes(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
-		return nil, errors.New("Hex string must have an even length")
+		return nil, errors.New("hex string must have an even length")
 	}
 
 	result := make([]byte, len(s)/2)
@@ -98,7 +98,7 @@ func hexStringToBytes(s string) ([]byte, error) {
 
 func hexStringToNodeId(s string) (nodeId, error) {
 	if len(s) != 40 {
-		return nodeId(make([]byte, 20)), errors.New("Invalid hex string length")
+		return nodeId(make([]byte, 20)), errors.New("invalid hex string length")
 	}
 
 	var idBytes, err = hexStringToBytes(s)

@@ -17,13 +17,13 @@ const ENTRIES = 8
 func getMyIp() (net.IP, error) {
 	var res, err = http.Get("https://api.ipify.org")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetching own IP address: %w", err)
 	}
 	defer res.Body.Close()
 
 	ipStr, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading own IP address response body: %w", err)
 	}
 	// TODO: check and handle for unsuccessful HTTP status codes
 	var result = net.ParseIP(string(ipStr))

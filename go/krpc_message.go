@@ -101,7 +101,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 	var y, yValid = data["y"].(bencodeString)
 
 	if !tValid || !yValid {
-		return nil, fmt.Errorf("Transaction id or KRPC message type are missing or invalid")
+		return nil, fmt.Errorf("decoding KRPC message: transaction id or message type are missing or invalid")
 	}
 
 	switch string(y) {
@@ -110,7 +110,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 		var a, aValid = data["a"].(bencodeDict)
 
 		if !qValid || !aValid {
-			return nil, fmt.Errorf("Query method or arguments are missing or invalid")
+			return nil, fmt.Errorf("decoding KRPC query: method name or arguments are missing or invalid")
 		}
 
 		return &krpcQuery{
@@ -122,7 +122,7 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 		var r, rValid = data["r"].(bencodeDict)
 
 		if !rValid {
-			return nil, fmt.Errorf("Response is not a dictionary")
+			return nil, fmt.Errorf("decoding KRPC response: \"r\" is not a dictionary")
 		}
 
 		return &krpcResponse{
@@ -133,14 +133,14 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 		var e, eValid = data["e"].(bencodeList)
 
 		if !eValid || len(e) != 2 {
-			return nil, fmt.Errorf("Error is not a two-element list")
+			return nil, fmt.Errorf("decoding KRPC error: \"e\" is not a two-element list")
 		}
 
 		var code, codeValid = e[0].(bencodeInt)
 		var message, messageValid = e[1].(bencodeString)
 
 		if !codeValid || !messageValid {
-			return nil, fmt.Errorf("Error code or message are missing or invalid")
+			return nil, fmt.Errorf("decoding KRPC error: code or message are missing or invalid")
 		}
 
 		return &krpcError{
@@ -149,6 +149,6 @@ func decodeKrpcMessage(data bencodeDict) (krpcMessage, error) {
 			message:       string(message),
 		}, nil
 	default:
-		return nil, fmt.Errorf("Unknown KRPC message type")
+		return nil, fmt.Errorf("decoding KRPC message: unknown type %q", y)
 	}
 }

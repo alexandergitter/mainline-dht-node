@@ -68,7 +68,7 @@ func (k *krpcRuntime) rpcCall(dest net.UDPAddr, msg krpcQuery) (krpcMessage, err
 
 	_, err := k.conn.WriteToUDP([]byte(msg.encode()), &dest)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sending KRPC request via UDP to %s: %w", dest.String(), err)
 	}
 
 	select {
