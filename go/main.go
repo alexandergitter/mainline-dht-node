@@ -33,6 +33,7 @@ func getMyIp() (net.IP, error) {
 func printUsage() {
 	fmt.Println("available commands:")
 	fmt.Println("  ping <ip:port>")
+	fmt.Println("  rt (print routing table)")
 	fmt.Println("  quit")
 }
 
@@ -90,6 +91,9 @@ func main() {
 		case "quit":
 			fmt.Println("Exiting...")
 			return
+
+		case "rt":
+			printRoutingTable(client.routingTable)
 
 		case "ping":
 			if len(args) != 1 {
