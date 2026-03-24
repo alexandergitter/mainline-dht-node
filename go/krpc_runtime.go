@@ -62,7 +62,7 @@ func (k *krpcRuntime) dequeuePendingRequest(id string) (chan<- krpcMessage, bool
 	return ch, ok
 }
 
-func (k *krpcRuntime) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
+func (k *krpcRuntime) rpcCall(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, error) {
 	var responseChannel, transactionId = k.enqueuePendingRequest()
 	msg.transactionId = transactionId
 
@@ -74,7 +74,8 @@ func (k *krpcRuntime) doRequest(dest *net.UDPAddr, msg krpcQuery) (krpcMessage, 
 	select {
 	case msg := <-responseChannel:
 		return msg, nil
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 10):
+		k.cancelPendingRequest(transactionId)
 		return nil, errors.New("timeout")
 	}
 }
@@ -123,6 +124,12 @@ func (k *krpcRuntime) receiveMessages(handler *dhtClient) {
 			var id = msg.getTransactionId()
 			if ch, ok := k.dequeuePendingRequest(id); ok {
 				ch <- msg
+			} else {
+				// TODO: We got a (error-)response with an unknown transaction ID - either we never sent a corresponding
+				//       request, we already handled an earlier response or the request timed out. Either way, we should
+				//       reply with an error response. For now, log it.
+				fmt.Println("Received response with unknown transaction ID:", id)
+				fmt.Println(msg)
 			}
 		}
 	}

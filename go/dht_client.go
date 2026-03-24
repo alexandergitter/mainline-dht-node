@@ -72,5 +72,5 @@ func (c *dhtClient) ping(dest nodeInfo) (krpcMessage, error) {
 		arguments:  bencodeDict{"id": bencodeString(c.thisNodeInfo.nodeId[:])},
 	}
 
-	return c.krpcRuntime.doRequest(&dest.address, msg)
+	return c.krpcRuntime.rpcCall(&dest.address, msg)
 }

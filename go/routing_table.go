@@ -14,7 +14,7 @@ type routingTable struct {
 
 func newRoutingTable(bucketSize int, thisNodeInfo nodeInfo) *routingTable {
 	// Technically we don't need all 160 buckets, since there are only 8 nodes with common
-	// longest prefix length of 157, so bucket 157 will never be split.
+	// longest prefix length of 157, so with a bucket size of 8, bucket 157 will never be split.
 	var initialTable = make([]bucket, 0, 160)
 	initialTable = append(initialTable, newBucket(bucketSize))
 
